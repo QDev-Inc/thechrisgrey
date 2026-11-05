@@ -77,7 +77,7 @@
     "react-helmet-async": "^3.0.0",
     "react-router-dom": "^7.17.0",
     "shiki": "^4.2.0",
-    "three": "^0.184.0"
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@aws-sdk/lib-dynamodb": "^3.1079.0",
