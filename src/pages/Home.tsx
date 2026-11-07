@@ -5,7 +5,7 @@ import FadeReveal from '../components/FadeReveal';
 import { SEO } from '../components/SEO';
 import ResponsiveImage from '../components/ResponsiveImage';
 import profileImage from '../assets/profile1.jpeg?responsive';
-import HeroIntroVideo from '../components/home/HeroIntroVideo';
+import HeroBento from '../components/home/HeroBento';
 import { typography } from '../utils/typography';
 import { homeFAQs, buildWebPageSchema } from '../utils/schemas';
 import { SOCIAL_LINKS } from '../constants/links';
@@ -105,28 +105,19 @@ const Home = () => {
           }),
         ]}
       />
-      {/* Hero Section: full-bleed animated brand intro, fading in on load.
-          The clip carries its own dark-navy background and the complete
-          "@TheChrisGrey" wordmark, so it is the hero's living backdrop — the
-          solid altivum-dark section matches its corners for seamless framing. */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-altivum-dark opacity-0 animate-fade-in">
-        <HeroIntroVideo />
-        <h1 className="sr-only">Christian Perez - Leadership Forged in Service</h1>
+      <HeroBento />
+      <div className="sr-only">
         {/* Direct-answer summary — first in DOM order, before the first H2
             (VAL-AEO-001, VAL-AEO-002), which is what the build-time [seo-gate]
             and AI answer engines read.
-            Deliberately sr-only: rendered as visible body copy it sat on top of
-            the brand intro video and read as stray text over the wordmark. The
-            hero is the one place on the site that is purely the film. Hiding it
-            visually costs nothing here — the gate parses the DOM, not the
-            pixels, and screen readers still announce it, so this is not hidden
-            text in the deceptive sense. The same copy is visible to sighted
-            visitors in the scroll section immediately below. */}
+            Deliberately sr-only: the bento hero already gives sighted visitors
+            the concise introduction, while this fuller summary remains in the
+            accessible DOM and is visible again in the scroll section below. */}
         <DirectAnswerSummary text={AEO_SUMMARIES['/']} className="sr-only" />
-      </section>
+      </div>
 
       {/* Sticky Profile Image Section with Scrolling Summary Tabs */}
-      <section ref={sectionRef} className="relative h-[675vh] md:h-[840vh]">
+      <section id="work" ref={sectionRef} className="relative h-[675vh] md:h-[840vh]">
         <div className="sticky top-0 h-screen overflow-hidden" style={{ transform: 'translate3d(0,0,0)' }}>
           <div className="absolute inset-0">
             <ResponsiveImage

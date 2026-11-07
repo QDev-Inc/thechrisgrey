@@ -4,7 +4,7 @@
     {
       "Effect": "Allow",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::thechrisgrey-kb-source/knowledge-base.txt"
+      "Resource": "arn:aws:s3:::thechrisgrey-kb-source/content/knowledge-base.txt"
     },
     {
       "Effect": "Allow",

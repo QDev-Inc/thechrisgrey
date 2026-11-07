@@ -34,7 +34,17 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const LAMBDAS = ['chat-stream', 'blueprint', 'kb-builder', 'metrics', 'kb-sync', 'mcp-server', 'session-token'];
+const LAMBDAS = [
+  'chat-stream',
+  'blueprint',
+  'kb-builder',
+  'metrics',
+  'kb-sync',
+  'mcp-server',
+  'session-token',
+  'contact-email',
+  'newsletter-subscription',
+];
 const DEFAULT_BUDGETS_PATH = join(repoRoot, 'lambda-size-budgets.json');
 const MB = 1024 * 1024;
 // AWS Lambda deployment package limits (the hard ceilings budgets stay under).

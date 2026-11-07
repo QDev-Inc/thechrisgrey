@@ -169,9 +169,9 @@ describe('security headers (customHttp.yml)', () => {
         expect(connectSrc).toMatch(/https:\/\/[a-z0-9]+\.lambda-url\.us-east-1\.on\.aws/);
       });
 
-      it('media-src allows the CloudFront hero-video origin', () => {
+      it('media-src is self-contained after removing the external hero video', () => {
         const mediaSrc = header('Content-Security-Policy').match(/media-src ([^;]*)/)?.[1];
-        expect(mediaSrc).toContain('https://d1x8296f4gso9u.cloudfront.net');
+        expect(mediaSrc).toBe("'self'");
       });
 
       it('img-src allows Sanity CDN, YouTube thumbnails, and data: URIs', () => {

@@ -404,7 +404,7 @@ test("POST /publish assembles document and uploads to S3", async () => {
     // Verify S3 upload was called
     assert.equal(s3Calls.length, 1, "one S3 PutObject call");
     assert.equal(s3Calls[0].input.Bucket, "thechrisgrey-kb-source");
-    assert.equal(s3Calls[0].input.Key, "knowledge-base.txt");
+    assert.equal(s3Calls[0].input.Key, "content/knowledge-base.txt");
 
     // Verify the assembled document contains the expected sections
     const docBody = s3Calls[0].input.Body;

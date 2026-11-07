@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { typography } from '../../utils/typography';
 import { isValidEmail } from '../../utils/validators';
+import { withTraceId } from '../../utils/traceId';
+import { getTurnstileToken } from '../../utils/turnstile';
 import Icon from '../icons/Icon';
 
 interface WaitlistProps {
@@ -39,16 +41,21 @@ export function Waitlist({
 
     setStatus({ kind: 'loading' });
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 10_000);
+    let timeoutId: number | undefined;
 
     try {
-      const response = await fetch(NEWSLETTER_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), source: 'blueprint' }),
-        signal: controller.signal,
-      });
+      const turnstileToken = await getTurnstileToken();
+      const controller = new AbortController();
+      timeoutId = window.setTimeout(() => controller.abort(), 10_000);
+      const response = await fetch(
+        NEWSLETTER_ENDPOINT,
+        withTraceId({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), source: 'blueprint', turnstileToken }),
+          signal: controller.signal,
+        }),
+      );
 
       if (response.ok) {
         setEmail('');
@@ -83,7 +90,7 @@ export function Waitlist({
         });
       }
     } finally {
-      window.clearTimeout(timeoutId);
+      if (timeoutId) window.clearTimeout(timeoutId);
     }
   };
 

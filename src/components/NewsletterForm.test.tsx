@@ -3,6 +3,10 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NewsletterForm from './NewsletterForm';
 
+const { mockGetTurnstileToken } = vi.hoisted(() => ({
+  mockGetTurnstileToken: vi.fn(),
+}));
+
 // Mock the hooks module
 vi.mock('../hooks', () => ({
   useFocusTrap: () => ({
@@ -12,12 +16,17 @@ vi.mock('../hooks', () => ({
   }),
 }));
 
+vi.mock('../utils/turnstile', () => ({
+  getTurnstileToken: mockGetTurnstileToken,
+}));
+
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 describe('NewsletterForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTurnstileToken.mockResolvedValue('turnstile-token');
   });
 
   describe('full variant (default)', () => {
@@ -77,6 +86,10 @@ describe('NewsletterForm', () => {
       });
 
       expect(screen.getByText('Thank You for Subscribing!')).toBeInTheDocument();
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+        email: 'test@example.com',
+        turnstileToken: 'turnstile-token',
+      });
     });
 
     it('should show error for 429 rate limit response', async () => {

@@ -11,19 +11,31 @@ import { HelmetProvider } from 'react-helmet-async';
 vi.mock('gsap', () => ({
   default: {
     registerPlugin: vi.fn(),
+    context: (callback: () => void) => {
+      callback();
+      return { revert: vi.fn() };
+    },
     timeline: vi.fn(() => ({
       fromTo: vi.fn(),
+      to: vi.fn(),
       scrollTrigger: { kill: vi.fn() },
       kill: vi.fn(),
     })),
+    utils: { toArray: () => [] },
   },
   gsap: {
     registerPlugin: vi.fn(),
+    context: (callback: () => void) => {
+      callback();
+      return { revert: vi.fn() };
+    },
     timeline: vi.fn(() => ({
       fromTo: vi.fn(),
+      to: vi.fn(),
       scrollTrigger: { kill: vi.fn() },
       kill: vi.fn(),
     })),
+    utils: { toArray: () => [] },
   },
 }));
 vi.mock('gsap/ScrollTrigger', () => ({ ScrollTrigger: {} }));
@@ -126,14 +138,14 @@ describe('SEO Integration Across Pages', () => {
   });
 
   describe('Per-route preconnect injection (VAL-PERF-008)', () => {
-    it('Home preconnects to the CloudFront hero video origin', async () => {
+    it('Home does not preconnect to a retired hero video origin', async () => {
       renderPage(Home, '/');
       await waitFor(() => {
-        const preconnect = document.head.querySelector(
-          'link[rel="preconnect"][href="https://d1x8296f4gso9u.cloudfront.net"]',
-        );
-        expect(preconnect, 'Home should preconnect to the CloudFront video origin').not.toBeNull();
+        expect(document.title).toContain('Christian Perez');
       });
+      expect(
+        document.head.querySelector('link[rel="preconnect"][href="https://d1x8296f4gso9u.cloudfront.net"]'),
+      ).toBeNull();
     });
 
     it('Blog preconnects to the Sanity CDN', async () => {

@@ -1,0 +1,105 @@
+openapi: 3.1.0
+info:
+  title: thechrisgrey Newsletter Subscription API
+  version: 1.0.0
+  description: Turnstile-protected newsletter subscriptions through Resend Contacts.
+paths:
+  /:
+    get:
+      summary: Service health
+      responses:
+        '200':
+          description: Service is reachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+    post:
+      summary: Subscribe an email address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionRequest'
+      responses:
+        '201':
+          description: The address was added or reactivated in Resend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/SubscriptionUnavailable'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [ok, service, version]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        service:
+          type: string
+          const: newsletter-subscription
+        version:
+          type: string
+    SubscriptionRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        source:
+          type: string
+          description: Optional UI attribution. It is not persisted by this service.
+        turnstileToken:
+          type: string
+          description: One-time Cloudflare Turnstile token, required when Turnstile is configured.
+    AcceptedResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+  responses:
+    InvalidRequest:
+      description: The body was malformed or did not include a valid email address.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The origin is not allowed or Turnstile verification failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: The sender exceeded the per-IP rate limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    SubscriptionUnavailable:
+      description: Resend did not accept the subscription request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

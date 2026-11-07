@@ -20,11 +20,11 @@ Quality, correct, secure code is **always** the priority — never "whatever sol
 
 ## Shared lessons — the hive-mind vault
 
-When you learn a **project-agnostic** lesson worth carrying to other projects (a gotcha, a pattern, a hard-won fix), record it as a markdown note in the shared Obsidian vault at `~/dev/altivum-dev/hive-mind/`, under `Lessons/`.
-
-- **Write the generalized principle — project-agnostic.** A concrete example is fine as illustration, but the lesson must transfer to any codebase. Do not write project-specific facts as the lesson.
-- **Label every note with the authoring AI — `Claude`** (the vault is AI-agnostic, shared across tools): frontmatter `agent: Claude` and a `#claude` tag. No project label needed.
-- One note per lesson; prefer a new note over editing an unrelated one.
+The cross-project lessons vault is at `/Users/cperez/dev/hive-mind`. Before
+making a non-trivial infrastructure, build, security, or tooling decision,
+read its `CONVENTIONS.md` and consult relevant notes in `Lessons/`. Add only
+new, project-agnostic lessons there, following its conventions; retain
+project-specific facts in this repository's documentation.
 
 ## Commands
 
@@ -35,18 +35,20 @@ npm run preview      # Preview production build
 npm run lint         # ESLint
 ```
 
-**Deployment:** Push to `main` triggers Amplify. Manual: `aws amplify start-job --app-id d3btl94rm91y13 --branch-name main --job-type RELEASE --region us-east-2 --profile personal-dev`
+**Deployment:** The personal-account foundation stack owns a static, manually deployed Amplify app. `npm run deploy:frontend:personal` publishes to its default Amplify domain. Do not attach the custom domain or change DNS without explicit user direction.
 
-**AWS account: always explicit.** The site's home is Delta Centric `512880383078` (profile `personal-dev`, the 2026-09-03 migration target; see `docs/migration-execution-plan.md`). The original backend still exists in Altivum `205930636302` under identical resource names, and the IDs `d3du8eg39a9peo`, `ARFYABW8HP`/`TXQTRAJOSD` and `5kofhp46ssob` elsewhere in this file are that Altivum copy; the Delta Centric equivalents are `d3btl94rm91y13`, `PSSJPTMXHQ`/`XJCD62RDOG` and `xiekxgo2pdoq`. Interactive shells may export any `AWS_PROFILE`, so never run a bare `aws` command for this repo: pass `--profile personal-dev`. The AWS scripts (`deploy:lambda`, `setup-alarms.sh`, `setup-dashboard.sh`, `iam-drift.sh`, `transcribe-*.mjs`) pin that profile themselves (`THECHRISGREY_AWS_PROFILE`, default `personal-dev`, no other value accepted) and refuse to run unless the caller account is `512880383078` (`scripts/lib/aws-preflight.sh`).
+**AWS account: always explicit.** The site's target account is Christian Perez - Personal Account `973662476023` (profile `qdev-personal`). The reproducible durable foundation lives in `infra/personal-account-foundation.yaml`; it owns the source and artifact buckets, DynamoDB tables, S3 Vectors indexes, Bedrock Knowledge Bases, guardrail, and Cognito admin pool. Interactive shells may export any `AWS_PROFILE`, so never run a bare `aws` command for this repo: use `--profile qdev-personal`. The AWS scripts pin that profile through `scripts/lib/aws-preflight.sh` and refuse to run unless the caller account is `973662476023`. Historical IDs in `docs/migration-execution-plan.md` describe retired-account work and must not be used for deployment.
 
 **Lambda deploy pattern:** Use the verified script — never hand-build `function.zip` (the manual `zip` glob omits sibling modules each handler imports and ships a crash-on-cold-start artifact).
 
 ```bash
-npm run deploy:lambda -- <name> --dry-run   # build + verify module graph, no upload, no AWS call
-npm run deploy:lambda -- <name>             # asserts account 512880383078 (personal-dev), then deploys (default region us-east-1; --region to override)
+npm run deploy:personal -- --dry-run          # package + validate every service, no uploads or resource writes
+npm run deploy:personal                        # full stack-managed deploy to qdev-personal / 973662476023
+npm run deploy:frontend:personal               # build + deploy static frontend to Amplify's default domain
+npm run deploy:lambda -- <name> --dry-run     # build + verify one module graph, no upload
 ```
 
-`scripts/deploy-lambda.sh` runs `npm ci`, dereferences `lambda-shared` fresh into the bundle, and runs a stubbed-`awslambda` `import()` smoke check that aborts on any unresolved import before calling `update-function-code`.
+`scripts/deploy-personal-account.sh` runs the same verified packaging for all services, writes versioned artifacts to the private foundation bucket, and updates `thechrisgrey-services`. It reads provider values from ignored `infra/personal-account.env`; generated signing keys are stored in Secrets Manager. `scripts/deploy-lambda.sh` remains a targeted break-glass updater after the service stack exists.
 
 ## Architecture
 
@@ -134,7 +136,7 @@ Full-viewport chat at `/chat` + floating 3D widget on all other pages. Powered b
 - Rate limit: 20 req/hr per IP (atomic DynamoDB, table `thechrisgrey-chat-ratelimit`, sourceIp only)
 - Input validation: role whitelist (user/assistant), 4000 char/msg, 50 msg cap
 - Server-side 20-msg sliding window; client mirrors
-- Guardrail `5kofhp46ssob` v5: filters PROMPT_ATTACK/HATE/INSULTS/SEXUAL(HIGH), VIOLENCE/MISCONDUCT(MED)
+- Guardrail: the current ID and version are exported by `thechrisgrey-foundation`; it filters PROMPT_ATTACK/HATE/INSULTS/SEXUAL(HIGH), VIOLENCE/MISCONDUCT(MED)
 - PageContext hardening: whitelisted paths, regex blog slugs, SAFE_TEXT_PATTERN
 - Timeouts: 25s agent, 10s Bedrock invocation, 20s client token handshake + 45s client stream budget (armed after the session-token round trip), 10s client `/forget`. The old single 30s client cap started before the Turnstile/issuer handshake, so it raced the server's own 25s agent budget plus up to 4s of KB retrieval.
 
@@ -142,9 +144,9 @@ Full-viewport chat at `/chat` + floating 3D widget on all other pages. Powered b
 
 **Response rules:** Plain text only, no markdown, conversational, 2-6 sentences, maxTokens 350, temp 0.6.
 
-**Knowledge Base:** ID `ARFYABW8HP`, DataSource `TXQTRAJOSD`, bucket `s3://thechrisgrey-kb-source/` (us-east-1), S3 Vectors store, Titan Embeddings v2. S3 Vectors require `AMAZON_BEDROCK_TEXT` + `AMAZON_BEDROCK_METADATA` as non-filterable keys.
+**Knowledge Base:** The current IDs and source bucket are generated by `thechrisgrey-foundation` in us-east-1. It provisions S3 Vectors stores with Titan Embeddings v2; S3 Vectors require `AMAZON_BEDROCK_TEXT` + `AMAZON_BEDROCK_METADATA` as non-filterable keys.
 
-**KB Sync** (`lambda/kb-sync/`): S3 event-triggered → StartIngestionJob. Manual: `aws bedrock-agent start-ingestion-job --knowledge-base-id PSSJPTMXHQ --data-source-id XJCD62RDOG --region us-east-1 --profile personal-dev`
+**KB Sync** (`lambda/kb-sync/`): S3 event-triggered → StartIngestionJob. The foundation stack exports the current KB and data-source IDs; transcript tooling resolves those outputs at runtime rather than hard-coding IDs.
 
 **Logging:** Log group `tcg-AI-chat` (7-day retention). All Lambda logging goes through `lambda/shared/logger.mjs` `createLogger()`, which automatically redacts PII (emails, phone-shaped digit runs) and sensitive keys (authorization, token, password, secret) via the `redact()` function before writing to CloudWatch. See `docs/bedrock-logging-queries.md`.
 
@@ -201,7 +203,7 @@ Series filtering (`?series=<slug>`), categories from data, Shiki syntax highligh
 Seven services under `lambda/`. All ESM `.mjs`, all on AWS SDK v3 (current `^3.1068` per the dep sweep in #111):
 
 - **`lambda/chat-stream/`** — Alti's brain. Strands SDK + Bedrock Haiku 4.5 + KB retrieval + 8 tools + HMAC + rate limit + Bedrock Guardrail. Streams via `awslambda.streamifyResponse`.
-- **`lambda/blueprint/`** — Architecture generator (Opus 4.6, **Converse/ConverseStream API**) with golden-example RAG, Zod schema validation, Haiku quality verdict pass. Engine is transport-agnostic (`engine.mjs`). Bedrock Guardrail (`5kofhp46ssob` v5) is applied as a dedicated **`ApplyGuardrail` INPUT pre-check** before generation (`applyInputGuardrail` in `bedrock.mjs`); **generation itself runs UNGUARDED** — guarding it false-blocked legitimate output (the chat-tuned guardrail flagged the directive system prompt as a prompt-attack and flagged generated IAM/architecture as policy violations). A blocked input surfaces `guardrail_intervened` + `BlueprintGuardrailIntervention`. Requires `bedrock:ApplyGuardrail` in the role (`iam-policy.json`).
+- **`lambda/blueprint/`** — Architecture generator (Opus 4.6, **Converse/ConverseStream API**) with golden-example RAG, Zod schema validation, Haiku quality verdict pass. Engine is transport-agnostic (`engine.mjs`). The foundation guardrail is applied as a dedicated **`ApplyGuardrail` INPUT pre-check** before generation (`applyInputGuardrail` in `bedrock.mjs`); **generation itself runs UNGUARDED** — guarding it false-blocked legitimate output (the chat-tuned guardrail flagged the directive system prompt as a prompt-attack and flagged generated IAM/architecture as policy violations). A blocked input surfaces `guardrail_intervened` + `BlueprintGuardrailIntervention`. Requires `bedrock:ApplyGuardrail` in the role (`iam-policy.json`).
 - **`lambda/kb-builder/`** — Cognito-auth'd CRUD on Sanity `kbEntry`. Builds `knowledge-base.txt` → S3 → auto-sync. PUT/DELETE both check `_type === 'kbEntry'` before writing.
 - **`lambda/kb-sync/`** — S3 event-triggered `StartIngestionJob` for the Bedrock KB.
 - **`lambda/metrics/`** — Web Vitals + CSP report ingestion → CloudWatch. Cognito-auth'd `/health`.
@@ -224,17 +226,17 @@ Seven services under `lambda/`. All ESM `.mjs`, all on AWS SDK v3 (current `^3.1
 
 ## Environment Variables
 
-**Amplify (us-east-2):** `VITE_CONTACT_ENDPOINT`, `VITE_NEWSLETTER_ENDPOINT`, `VITE_CHAT_ENDPOINT`, `VITE_CHAT_SIGNING_KEY`, `YOUTUBE_API_KEY` (build-only), `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_KB_BUILDER_ENDPOINT`, `VITE_METRICS_ENDPOINT`
+**Amplify (us-east-1, manual static deployment):** `VITE_CONTACT_ENDPOINT`, `VITE_NEWSLETTER_ENDPOINT`, `VITE_CHAT_ENDPOINT`, `VITE_BLUEPRINT_ENDPOINT`, `VITE_SESSION_ENDPOINT`, `VITE_TURNSTILE_SITE_KEY`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_KB_BUILDER_ENDPOINT`, `VITE_METRICS_ENDPOINT`, and `YOUTUBE_API_KEY` (build-only). `npm run deploy:frontend:personal` loads the ignored `.env.local` before it builds, then publishes to the default Amplify domain.
 
 **Chat-stream Lambda:** `CHAT_SIGNING_KEY`, `SESSION_TOKEN_KEY`, `CHAT_RATE_LIMIT_TABLE` (thechrisgrey-chat-ratelimit), `CHAT_MEMORY_TABLE` (thechrisgrey-chat-memory), `KB_ID`, `PODCAST_KB_ID` (unset disables the `search_podcast` tool), `GUARDRAIL_ID`, `GUARDRAIL_VERSION`, `BEDROCK_MODEL_ID`, `SANITY_PROJECT_ID`, `SANITY_DATASET` (optional, enables cite tool). `BEDROCK_MODEL_ID` and the region are env-first but default in code to the current live values (Haiku 4.5 / us-east-1), so no deploy change was needed to introduce them — `AWS_REGION` is a Lambda-reserved variable the runtime supplies, not one to set on the function. No `KB_DATA_SOURCE_ID` here: chat-stream only retrieves, so the data-source id belongs to kb-sync.
 
-**KB-sync Lambda:** `KB_ID` (default `ARFYABW8HP`), `KB_DATA_SOURCE_ID` (default `TXQTRAJOSD`; the legacy `DATA_SOURCE_ID` name is still honoured as a fallback). A retryable `StartIngestionJob` failure is re-thrown so the S3 async invoke retries instead of dropping the sync, and the role needs `bedrock:GetIngestionJob` (it polls the job to settle) alongside `bedrock:StartIngestionJob`.
+**KB-sync Lambda:** `KB_ID` and `KB_DATA_SOURCE_ID` come from foundation exports at stack deployment; the legacy `DATA_SOURCE_ID` name is still honoured as a fallback. A retryable `StartIngestionJob` failure is re-thrown so the S3 async invoke retries instead of dropping the sync, and the role needs `bedrock:GetIngestionJob` (it polls the job to settle) alongside `bedrock:StartIngestionJob`.
 
-**Important:** Local `.env.local` not synced to prod. Add via: `aws amplify update-branch --app-id d3btl94rm91y13 --branch-name main --environment-variables "VAR=value" --region us-east-2 --profile personal-dev`
+**Important:** Local `.env.local` is ignored. Its `VITE_*` values are public build configuration, and the manual frontend deploy script uses them to produce the hosted artifact. Never place server secrets there.
 
 ## Deployment Notes
 
-- Node 20 (`.nvmrc`), never commit `node_modules/` or `dist/`
+- Node 22 (`.nvmrc`), never commit `node_modules/` or `dist/`
 - `public/` → dist root; `src/assets/` → hashed bundles
 - Site: `https://thechrisgrey.com`
 - Amplify config: `amplify.yml`

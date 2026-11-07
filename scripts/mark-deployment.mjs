@@ -25,17 +25,18 @@
  */
 
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
+import { pinAwsAccount } from './lib/aws-preflight.mjs';
 
 const service = process.argv[2];
 const regionArg = process.argv.find((a) => process.argv[process.argv.indexOf(a) - 1] === '--region');
 const REGION = regionArg || process.env.AWS_REGION || 'us-east-1';
 
-// Same account pin as scripts/lib/aws-preflight.sh: profile personal-dev (Delta
-// Centric 512880383078), never the ambient AWS_PROFILE. deploy-lambda.sh has
+// Same account pin as scripts/lib/aws-preflight.sh: profile qdev-personal
+// (Christian Perez - Personal Account 973662476023), never the ambient AWS_PROFILE. deploy-lambda.sh has
 // already asserted the account and exported the profile; this best-effort marker
 // does not repeat the STS check, and skips rather than write anywhere else.
-const PROFILE = process.env.THECHRISGREY_AWS_PROFILE || 'personal-dev';
-if (PROFILE !== 'personal-dev') {
+const PROFILE = process.env.THECHRISGREY_AWS_PROFILE || 'qdev-personal';
+if (PROFILE !== 'qdev-personal') {
   console.warn(`[mark-deployment] THECHRISGREY_AWS_PROFILE='${PROFILE}' is not this repo's home; skipping the marker.`);
   process.exit(0);
 }
@@ -55,6 +56,8 @@ const VALID_SERVICES = [
   'metrics',
   'mcp-server',
   'session-token',
+  'contact-email',
+  'newsletter-subscription',
 ];
 
 if (!VALID_SERVICES.includes(service)) {
@@ -63,6 +66,7 @@ if (!VALID_SERVICES.includes(service)) {
 }
 
 try {
+  pinAwsAccount();
   const client = new CloudWatchClient({ region: REGION });
   const command = new PutMetricDataCommand({
     Namespace: 'TheChrisGrey/Deployments',

@@ -1,8 +1,32 @@
 import { BACKEND_POST_URL } from '../support/endpoints';
 
+const TURNSTILE_TOKEN = 'contact-test-turnstile-token';
+
+function visitContact() {
+  cy.visit('/contact', {
+    onBeforeLoad(win) {
+      let onToken: ((token: string) => void) | undefined;
+      Object.defineProperty(win, 'turnstile', {
+        value: {
+          render(_container: HTMLElement, options: { callback?: (token: string) => void }) {
+            onToken = options.callback;
+            return 'contact-test-widget';
+          },
+          execute() {
+            onToken?.(TURNSTILE_TOKEN);
+          },
+          remove() {
+            onToken = undefined;
+          },
+        },
+      });
+    },
+  });
+}
+
 describe('Contact Page', () => {
   beforeEach(() => {
-    cy.visit('/contact');
+    visitContact();
   });
 
   it('should load the contact page successfully', () => {
@@ -121,6 +145,11 @@ describe('Contact Page', () => {
     );
     cy.get('button[type="submit"]').click();
 
+    cy.wait('@contactSubmit').then(({ request }) => {
+      const body = typeof request.body === 'string' ? JSON.parse(request.body) : request.body;
+      expect(body).to.have.property('turnstileToken', TURNSTILE_TOKEN);
+    });
+
     // Success modal should appear
     cy.get('[role="dialog"]').should('be.visible');
     cy.contains('Thank You!').should('be.visible');
@@ -223,7 +252,7 @@ describe('Contact Page', () => {
 
 describe('Contact Page - Network Error', () => {
   it('should show an error message when the network request fails', () => {
-    cy.visit('/contact');
+    visitContact();
 
     // Set up the network error intercept after the page loads
     cy.intercept('POST', BACKEND_POST_URL, {
@@ -235,6 +264,7 @@ describe('Contact Page - Network Error', () => {
     cy.get('textarea#message').type('This is a test message for the contact form submission.');
     cy.get('button[type="submit"]').click();
 
+    cy.wait('@networkError');
     cy.contains('Network error').should('be.visible');
   });
 });

@@ -97,11 +97,9 @@ export const HOME_CONTEXT = {
     'Tell me about the podcast',
     "What's Beyond the Assessment about?",
   ],
-  // The hero intro video (HeroIntroVideo) streams its MP4 from the CloudFront
-  // video origin, so only Home preconnects to it (VAL-PERF-003/008). Other
-  // routes never request this origin, so the preconnect is route-specific
-  // rather than global in index.html.
-  preconnects: ['https://d1x8296f4gso9u.cloudfront.net'] as readonly string[],
+  // The home signal field is self-contained. Keep route-specific preconnects
+  // empty until an actual first-viewport network dependency is introduced.
+  preconnects: [] as readonly string[],
 };
 
 export const ROUTES: readonly RouteDefinition[] = [

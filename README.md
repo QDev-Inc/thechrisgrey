@@ -122,22 +122,18 @@ Lambda Function URL (streaming)
 
 ## AWS Infrastructure
 
-| Service             | Resource                               | Region    | Purpose                          |
-| ------------------- | -------------------------------------- | --------- | -------------------------------- |
-| **Amplify**         | `d3du8eg39a9peo`                       | us-east-2 | Hosting, CI/CD                   |
-| **Lambda**          | `thechrisgrey-chat-stream`             | us-east-1 | AI chat streaming                |
-| **Lambda**          | `thechrisgrey-contact-email`           | us-east-2 | Contact form                     |
-| **Lambda**          | `thechrisgrey-newsletter-subscription` | us-east-2 | Newsletter                       |
-| **Lambda**          | `thechrisgrey-kb-sync`                 | us-east-1 | KB auto-sync on S3 changes       |
-| **Lambda**          | `thechrisgrey-kb-builder`              | us-east-1 | KB admin CRUD operations         |
-| **Lambda**          | `thechrisgrey-metrics`                 | us-east-1 | Metrics collection and reporting |
-| **Bedrock KB**      | `ARFYABW8HP`                           | us-east-1 | RAG knowledge base               |
-| **Cognito**         | User Pool                              | us-east-1 | Admin authentication             |
-| **S3**              | `thechrisgrey-kb-source`               | us-east-1 | KB source documents              |
-| **S3**              | `thechrisgrey-vectors`                 | us-east-1 | Vector embeddings                |
-| **DynamoDB**        | `thechrisgrey-chat-ratelimit`          | us-east-1 | Rate limiting (20 req/hr/IP)     |
-| **Secrets Manager** | `thechrisgrey/youtube-api-key`         | us-east-1 | YouTube API key                  |
-| **CloudWatch**      | `tcg-AI-chat`                          | us-east-1 | Bedrock invocation logs          |
+| Service               | Resource                                   | Region    | Purpose                                   |
+| --------------------- | ------------------------------------------ | --------- | ----------------------------------------- |
+| **Foundation stack**  | `thechrisgrey-foundation`                  | us-east-1 | Durable S3, DynamoDB, Bedrock, Cognito    |
+| **Application stack** | `thechrisgrey-services`                    | us-east-1 | Nine Lambda services and Function URLs    |
+| **Bedrock**           | Two Knowledge Bases + S3 Vectors indexes   | us-east-1 | Site and podcast RAG                      |
+| **Lambda**            | `thechrisgrey-chat-stream`                 | us-east-1 | AI chat streaming                         |
+| **Lambda**            | `thechrisgrey-contact-email`               | us-east-1 | Contact form delivery through Resend      |
+| **Lambda**            | `thechrisgrey-newsletter-subscription`     | us-east-1 | Resend audience subscription              |
+| **Cognito**           | `thechrisgrey-admin` user pool             | us-east-1 | Admin authentication                      |
+| **DynamoDB**          | `thechrisgrey-chat-ratelimit`              | us-east-1 | Rate limiting                             |
+| **CloudWatch**        | Per-function log groups (30-day retention) | us-east-1 | Logs and operational metrics              |
+| **Amplify**           | `thechrisgrey` manual static app           | us-east-1 | Default-domain staging before DNS cutover |
 
 ---
 
@@ -145,7 +141,7 @@ Lambda Function URL (streaming)
 
 ### Prerequisites
 
-- Node.js 20.x (see `.nvmrc`)
+- Node.js 22.x (see `.nvmrc`)
 - npm
 - AWS CLI (for deployment)
 
@@ -227,45 +223,46 @@ Set in AWS Amplify console or in a local `.env` file:
 
 ## Deployment
 
-### Automatic (Recommended)
+### Frontend deployment (no DNS changes)
 
-Push to `main` triggers automatic Amplify deployment:
-
-```bash
-git push origin main
-```
-
-### Manual Rebuild
+The personal account hosts a static manual-deploy Amplify app at its default
+`amplifyapp.com` URL. It is deliberately not connected to the custom domain or
+to Git-based CI/CD yet. Build and publish the current frontend with:
 
 ```bash
-aws amplify start-job \
-  --app-id d3btl94rm91y13 \
-  --branch-name main \
-  --job-type RELEASE \
-  --region us-east-2 \
-  --profile personal-dev   # Delta Centric 512880383078, the site's home
+npm run deploy:frontend:personal
 ```
+
+The command reads ignored `.env.local` values, applies `customHttp.yml` as the
+Amplify security-header configuration, and uploads the built static artifact.
+It does not create a custom-domain association or modify DNS.
+
+### Backend deployment
+
+The backend is provisioned reproducibly in Christian Perez - Personal Account
+(`qdev-personal`, account `973662476023`). The durable foundation is already
+separate from the service release, so a normal deploy does not replace data
+stores or create DNS changes.
 
 ### Lambda Deployment
 
-Each Lambda function is deployed independently via a single verified script. The script
-installs from the lockfile, dereferences the `lambda-shared` symlink into the bundle, and
-**verifies the entire module graph resolves before upload** — so a deploy can no longer ship
-a Lambda that crashes on cold start.
+Copy `infra/personal-account.env.example` to the ignored
+`infra/personal-account.env`, add the provider values, then use the stack-managed
+deployer. It installs from the lockfile, dereferences `lambda-shared`, and verifies
+every module graph before uploading an immutable release.
 
 ```bash
-# Verify the bundle builds and resolves, without uploading:
-npm run deploy:lambda -- chat-stream --dry-run
+# Verify all bundles and the service template without uploads:
+npm run deploy:personal -- --dry-run
 
-# Deploy for real (runs as profile personal-dev and refuses unless the caller
-# account is Delta Centric 512880383078):
-npm run deploy:lambda -- chat-stream
+# Deploy the service stack to qdev-personal:
+npm run deploy:personal
 ```
 
-Works for any Lambda under `lambda/` (e.g. `chat-stream`, `blueprint`, `kb-builder`,
-`metrics`, `kb-sync`, `mcp-server`). Pass `--region <r>` to override the default
-(`us-east-1`). Do **not** hand-build `function.zip` — the manual `zip` glob omits the
-sibling modules each handler imports and produces a broken artifact.
+`npm run deploy:lambda -- <name>` remains available for a targeted emergency code
+update after the service stack exists. Do **not** hand-build `function.zip` — a
+manual `zip` glob can omit sibling modules each handler imports and produce a
+broken cold start.
 
 ---
 
@@ -377,8 +374,8 @@ Episodes are fetched at build time from the `@AltivumPress` channel.
 ### Amazon Bedrock (AI Chat)
 
 - **Model:** Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`)
-- **Knowledge Base:** `ARFYABW8HP` (autobiography chunks)
-- **Guardrail:** `5kofhp46ssob` (content filtering)
+- **Knowledge Base:** foundation-stack managed, two sources (site content and podcast transcripts)
+- **Guardrail:** foundation-stack managed content filtering
 - **Rate Limit:** 20 requests/hour per IP (DynamoDB-backed)
 - Streaming responses via Lambda Function URL with RAG retrieval (5 chunks per query)
 

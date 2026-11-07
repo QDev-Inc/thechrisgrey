@@ -12,6 +12,7 @@ import { trackEvent } from '../utils/analytics';
 import Testimonials from '../components/Testimonials';
 import { createLogger } from '../utils/logger';
 import { withTraceId } from '../utils/traceId';
+import { getTurnstileToken } from '../utils/turnstile';
 import DirectAnswerSummary from '../components/aeo/DirectAnswerSummary';
 import FAQSection from '../components/aeo/FAQSection';
 import { AEO_SUMMARIES } from '../data/aeoSummaries';
@@ -218,10 +219,12 @@ const Contact = () => {
     ].filter(Boolean);
     const detailBlock = detailLines.length > 0 ? `${detailLines.join('\n')}\n\n` : '';
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
+      const turnstileToken = await getTurnstileToken();
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(
         import.meta.env.VITE_CONTACT_ENDPOINT,
         withTraceId({
@@ -234,6 +237,7 @@ const Contact = () => {
             email: formData.email.trim(),
             message: `Subject: ${formData.subject.trim() || 'No subject'}\n\n${detailBlock}${formData.message.trim()}`,
             website: formData.website, // honeypot
+            turnstileToken,
           }),
           signal: controller.signal,
         }),
@@ -272,7 +276,7 @@ const Contact = () => {
         });
       }
     } finally {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
     }
   };
 

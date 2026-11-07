@@ -1,0 +1,875 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Lambda application layer for thechrisgrey. Requires artifacts uploaded to the
+  foundation stack's private artifact bucket.
+
+Parameters:
+  ArtifactVersion:
+    Type: String
+    Description: Immutable artifact prefix uploaded by deploy-personal-account.sh.
+    AllowedPattern: '^[A-Za-z0-9._/-]+$'
+  CorsOrigin:
+    Type: String
+    Default: https://thechrisgrey.com
+    Description: Comma-separated browser origins allowed to call public Function URLs.
+  ChatSigningKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SessionTokenKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+  BlueprintSigningKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+  TurnstileSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SanityWriteToken:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SanityReadToken:
+    Type: String
+    NoEcho: true
+    Default: ''
+  AdminAllowlist:
+    Type: String
+    NoEcho: true
+    Default: ''
+  ResendSecretArn:
+    Type: String
+    Default: ''
+  ResendFromEmail:
+    Type: String
+    Default: ''
+  ContactRecipientEmail:
+    Type: String
+    Default: ''
+  ResendNewsletterSegmentId:
+    Type: String
+    Default: ''
+
+Conditions:
+  HasResendSecret: !Not [!Equals [!Ref ResendSecretArn, '']]
+
+Resources:
+  ChatStreamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-chat-stream-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                  - bedrock:ApplyGuardrail
+                  - bedrock:Retrieve
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:*'
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*'
+              - Effect: Allow
+                Action: [dynamodb:Query, dynamodb:PutItem, dynamodb:BatchWriteItem]
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-ChatMemoryTableArn
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+
+  BlueprintRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-blueprint-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, bedrock:ApplyGuardrail]
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:*:*'
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+
+  KbBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-kb-builder-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource:
+                  - Fn::Join:
+                      - ''
+                      - - 'arn:'
+                        - !Ref AWS::Partition
+                        - ':s3:::'
+                        - Fn::ImportValue: thechrisgrey-foundation-KnowledgeBaseSourceBucketName
+                        - '/content/knowledge-base.txt'
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+
+  KbSyncRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-kb-sync-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [bedrock:StartIngestionJob, bedrock:GetIngestionJob]
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*'
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+
+  MetricsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-metrics-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [cloudwatch:PutMetricData, cloudwatch:GetMetricStatistics]
+                Resource: '*'
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+
+  McpServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-mcp-server-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:ApplyGuardrail, bedrock:Retrieve]
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:*'
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*'
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+
+  SessionTokenRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-session-token-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+
+  ContactEmailRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-contact-email-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !If
+                  - HasResendSecret
+                  - !Ref ResendSecretArn
+                  - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:unconfigured'
+
+  NewsletterSubscriptionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: thechrisgrey-newsletter-subscription-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: application-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !If
+                  - HasResendSecret
+                  - !Ref ResendSecretArn
+                  - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:unconfigured'
+
+  ChatStreamFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-chat-stream
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt ChatStreamRole.Arn
+      MemorySize: 1024
+      Timeout: 60
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/chat-stream.zip'
+      Environment:
+        Variables:
+          CORS_ORIGIN: !Ref CorsOrigin
+          CHAT_SIGNING_KEY: !Ref ChatSigningKey
+          SESSION_TOKEN_KEY: !Ref SessionTokenKey
+          CHAT_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+          CHAT_MEMORY_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-ChatMemoryTableName
+          KB_ID:
+            Fn::ImportValue: thechrisgrey-foundation-MainKnowledgeBaseId
+          PODCAST_KB_ID:
+            Fn::ImportValue: thechrisgrey-foundation-PodcastKnowledgeBaseId
+          GUARDRAIL_ID:
+            Fn::ImportValue: thechrisgrey-foundation-GuardrailId
+          GUARDRAIL_VERSION:
+            Fn::ImportValue: thechrisgrey-foundation-GuardrailVersion
+          BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
+          SANITY_PROJECT_ID: k5950b3w
+          SANITY_DATASET: production
+          SANITY_READ_TOKEN: !Ref SanityReadToken
+
+  BlueprintFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-blueprint
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt BlueprintRole.Arn
+      MemorySize: 1024
+      Timeout: 60
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/blueprint.zip'
+      Environment:
+        Variables:
+          CORS_ORIGIN: !Ref CorsOrigin
+          BLUEPRINT_SIGNING_KEY: !Ref BlueprintSigningKey
+          SESSION_TOKEN_KEY: !Ref SessionTokenKey
+          BLUEPRINT_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+          GUARDRAIL_ID:
+            Fn::ImportValue: thechrisgrey-foundation-GuardrailId
+          GUARDRAIL_VERSION:
+            Fn::ImportValue: thechrisgrey-foundation-GuardrailVersion
+          BEDROCK_OPUS_MODEL_ID: us.anthropic.claude-opus-4-6-v1
+          BEDROCK_HAIKU_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
+          SANITY_PROJECT_ID: k5950b3w
+          SANITY_DATASET: production
+          SANITY_READ_TOKEN: !Ref SanityReadToken
+
+  KbBuilderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-kb-builder
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt KbBuilderRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/kb-builder.zip'
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID:
+            Fn::ImportValue: thechrisgrey-foundation-AdminUserPoolId
+          S3_BUCKET:
+            Fn::ImportValue: thechrisgrey-foundation-KnowledgeBaseSourceBucketName
+          KB_SOURCE_KEY: content/knowledge-base.txt
+          SANITY_WRITE_TOKEN: !Ref SanityWriteToken
+          ADMIN_ALLOWLIST: !Ref AdminAllowlist
+          CHAT_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+
+  KbSyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-kb-sync
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt KbSyncRole.Arn
+      MemorySize: 256
+      Timeout: 60
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/kb-sync.zip'
+      Environment:
+        Variables:
+          KB_ID:
+            Fn::ImportValue: thechrisgrey-foundation-MainKnowledgeBaseId
+          KB_DATA_SOURCE_ID:
+            Fn::ImportValue: thechrisgrey-foundation-MainKnowledgeBaseDataSourceId
+
+  MetricsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-metrics
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt MetricsRole.Arn
+      MemorySize: 256
+      Timeout: 30
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/metrics.zip'
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID:
+            Fn::ImportValue: thechrisgrey-foundation-AdminUserPoolId
+          ADMIN_ALLOWLIST: !Ref AdminAllowlist
+          CHAT_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+
+  McpServerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-mcp-server
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt McpServerRole.Arn
+      MemorySize: 512
+      Timeout: 60
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/mcp-server.zip'
+      Environment:
+        Variables:
+          CORS_ORIGIN: !Ref CorsOrigin
+          MCP_CORS_ORIGIN: !Ref CorsOrigin
+          CHAT_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+          KB_ID:
+            Fn::ImportValue: thechrisgrey-foundation-MainKnowledgeBaseId
+          GUARDRAIL_ID:
+            Fn::ImportValue: thechrisgrey-foundation-GuardrailId
+          GUARDRAIL_VERSION:
+            Fn::ImportValue: thechrisgrey-foundation-GuardrailVersion
+          BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
+          SESSION_TOKEN_KEY: !Ref SessionTokenKey
+          SANITY_PROJECT_ID: k5950b3w
+          SANITY_DATASET: production
+
+  SessionTokenFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-session-token
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt SessionTokenRole.Arn
+      MemorySize: 256
+      Timeout: 15
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/session-token.zip'
+      Environment:
+        Variables:
+          CORS_ORIGIN: !Ref CorsOrigin
+          SESSION_TOKEN_KEY: !Ref SessionTokenKey
+          TURNSTILE_SECRET: !Ref TurnstileSecret
+          SESSION_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+
+  ContactEmailFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-contact-email
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt ContactEmailRole.Arn
+      MemorySize: 256
+      Timeout: 15
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/contact-email.zip'
+      Environment:
+        Variables:
+          CORS_ORIGIN: !Ref CorsOrigin
+          TURNSTILE_SECRET: !Ref TurnstileSecret
+          CONTACT_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+          RESEND_API_KEY_SECRET_ARN: !Ref ResendSecretArn
+          RESEND_FROM_EMAIL: !Ref ResendFromEmail
+          CONTACT_RECIPIENT_EMAIL: !Ref ContactRecipientEmail
+
+  NewsletterSubscriptionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: thechrisgrey-newsletter-subscription
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt NewsletterSubscriptionRole.Arn
+      MemorySize: 256
+      Timeout: 15
+      Code:
+        S3Bucket:
+          Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
+        S3Key: !Sub '${ArtifactVersion}/newsletter-subscription.zip'
+      Environment:
+        Variables:
+          CORS_ORIGIN: !Ref CorsOrigin
+          TURNSTILE_SECRET: !Ref TurnstileSecret
+          NEWSLETTER_RATE_LIMIT_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
+          RESEND_API_KEY_SECRET_ARN: !Ref ResendSecretArn
+          RESEND_NEWSLETTER_SEGMENT_ID: !Ref ResendNewsletterSegmentId
+
+  ChatStreamLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ChatStreamFunction}'
+      RetentionInDays: 30
+
+  BlueprintLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${BlueprintFunction}'
+      RetentionInDays: 30
+
+  KbBuilderLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${KbBuilderFunction}'
+      RetentionInDays: 30
+
+  KbSyncLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${KbSyncFunction}'
+      RetentionInDays: 30
+
+  MetricsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${MetricsFunction}'
+      RetentionInDays: 30
+
+  McpServerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${McpServerFunction}'
+      RetentionInDays: 30
+
+  SessionTokenLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${SessionTokenFunction}'
+      RetentionInDays: 30
+
+  ContactEmailLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ContactEmailFunction}'
+      RetentionInDays: 30
+
+  NewsletterSubscriptionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${NewsletterSubscriptionFunction}'
+      RetentionInDays: 30
+
+  ChatStreamUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ChatStreamFunction.Arn
+      AuthType: NONE
+      InvokeMode: RESPONSE_STREAM
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, authorization, x-request-id, x-chat-timestamp, x-chat-signature]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  BlueprintUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt BlueprintFunction.Arn
+      AuthType: NONE
+      InvokeMode: RESPONSE_STREAM
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, authorization, x-request-id]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  KbBuilderUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt KbBuilderFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, authorization, x-request-id]
+        AllowMethods: [GET, POST, PUT, DELETE]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  MetricsUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt MetricsFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, authorization, x-request-id]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  McpServerUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt McpServerFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowCredentials: true
+        AllowHeaders: [content-type, authorization, mcp-protocol-version, x-request-id]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  SessionTokenUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt SessionTokenFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, x-request-id]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  ContactEmailUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ContactEmailFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, x-request-id]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  NewsletterSubscriptionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt NewsletterSubscriptionFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders: [content-type, x-request-id]
+        AllowMethods: [GET, POST]
+        AllowOrigins: !Split [',', !Ref CorsOrigin]
+        MaxAge: 86400
+
+  ChatStreamUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatStreamFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  ChatStreamInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChatStreamFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  BlueprintUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BlueprintFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  BlueprintInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BlueprintFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  KbBuilderUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref KbBuilderFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  KbBuilderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref KbBuilderFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  MetricsUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MetricsFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  MetricsInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MetricsFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  McpServerUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref McpServerFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  McpServerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref McpServerFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  SessionTokenUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SessionTokenFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  SessionTokenInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SessionTokenFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  ContactEmailUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ContactEmailFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  ContactEmailInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ContactEmailFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+  NewsletterSubscriptionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NewsletterSubscriptionFunction
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+      Principal: '*'
+  NewsletterSubscriptionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NewsletterSubscriptionFunction
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      Principal: '*'
+
+  KbSourceObjectCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: thechrisgrey-kb-source-object-created
+      State: ENABLED
+      EventPattern:
+        source: [aws.s3]
+        detail-type: [Object Created]
+        detail:
+          bucket:
+            name:
+              - Fn::ImportValue: thechrisgrey-foundation-KnowledgeBaseSourceBucketName
+          object:
+            key:
+              - prefix: content/
+      Targets:
+        - Arn: !GetAtt KbSyncFunction.Arn
+          Id: KbSyncFunction
+
+  KbSourceObjectCreatedPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref KbSyncFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt KbSourceObjectCreatedRule.Arn
+
+Outputs:
+  ChatEndpoint:
+    Value: !GetAtt ChatStreamUrl.FunctionUrl
+  BlueprintEndpoint:
+    Value: !GetAtt BlueprintUrl.FunctionUrl
+  KbBuilderEndpoint:
+    Value: !GetAtt KbBuilderUrl.FunctionUrl
+  MetricsEndpoint:
+    Value: !GetAtt MetricsUrl.FunctionUrl
+  McpServerEndpoint:
+    Value: !GetAtt McpServerUrl.FunctionUrl
+  SessionEndpoint:
+    Value: !GetAtt SessionTokenUrl.FunctionUrl
+  ContactEndpoint:
+    Value: !GetAtt ContactEmailUrl.FunctionUrl
+  NewsletterEndpoint:
+    Value: !GetAtt NewsletterSubscriptionUrl.FunctionUrl

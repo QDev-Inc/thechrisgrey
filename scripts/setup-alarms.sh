@@ -17,8 +17,8 @@
 #     logs:PutMetricFilter, logs:DescribeLogGroups permissions
 #   - The SNS topic thechrisgrey-site-alerts must exist (created by the
 #     infrastructure setup in docs/superpowers/plans/2026-03-23-differentiated-page-experiences.md)
-#   - Runs as profile personal-dev and refuses unless the caller account is Delta
-#     Centric 512880383078 (scripts/lib/aws-preflight.sh); the alarms and their SNS
+#   - Runs as profile qdev-personal and refuses unless the caller account is
+#     Christian Perez - Personal Account 973662476023 (scripts/lib/aws-preflight.sh); the alarms and their SNS
 #     action both go to that asserted account
 
 set -euo pipefail

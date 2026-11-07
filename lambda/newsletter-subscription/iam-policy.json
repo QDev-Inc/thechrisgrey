@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["dynamodb:UpdateItem"],
+      "Resource": "arn:aws:dynamodb:us-east-1:${ACCOUNT_ID}:table/thechrisgrey-chat-ratelimit"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:us-east-1:${ACCOUNT_ID}:secret:thechrisgrey/resend-*"
+    }
+  ]
+}

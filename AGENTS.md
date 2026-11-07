@@ -8,15 +8,24 @@ essentials to set up, build, test, and change the code correctly.
 ## What this repo is
 
 Personal website for Christian Perez (`thechrisgrey.com`). A React 19 +
-TypeScript + Vite single-page app (deployed on AWS Amplify) plus seven
+TypeScript + Vite single-page app (deployed on AWS Amplify) plus nine
 independently deployable AWS Lambda services under `lambda/`. The AI chat agent
 "Alti" is powered by Amazon Bedrock (Claude Haiku 4.5) with RAG.
+
+## Shared lessons — Hive Mind
+
+The cross-project lessons vault is at `/Users/cperez/dev/hive-mind`. Before
+making a non-trivial infrastructure, build, security, or tooling decision,
+read `/Users/cperez/dev/hive-mind/CONVENTIONS.md` and consult relevant notes in
+`/Users/cperez/dev/hive-mind/Lessons/`. Add only
+new, project-agnostic lessons there, following its conventions; retain
+project-specific facts in this repository's documentation.
 
 ## Setup
 
 - **Node 22** is required (pinned in `.nvmrc`). Use `nvm use` before anything.
 - Package manager is **npm** (a committed `package-lock.json` is the source of truth).
-- **npm workspaces** manages the frontend + 8 Lambda packages as a monorepo.
+- **npm workspaces** manages the frontend + 10 Lambda packages as a monorepo.
   `npm install` at the root installs all workspace deps and symlinks `lambda-shared`.
 
 ```bash
@@ -36,41 +45,44 @@ rebuild in the container automatically.
 
 ## Core commands
 
-| Command                           | What it does                                                    |
-| --------------------------------- | --------------------------------------------------------------- |
-| `npm run dev`                     | Vite dev server (localhost:5173)                                |
-| `npm run build`                   | Full production pipeline (see below)                            |
-| `npm run build:timed`             | Build with per-step timing report                               |
-| `npm run build:compare`           | Compare build timing vs previous CI run                         |
-| `npm run bundle:size`             | Measure + budget-check the built frontend bundle                |
-| `npm run lambda:size`             | Measure + budget-check every Lambda deployment package          |
-| `npm run build:analyze`           | Interactive bundle treemap (vite-bundle-visualizer)             |
-| `npm run preview`                 | Serve the production build locally                              |
-| `npm run lint`                    | ESLint on `src/` (`--max-warnings 0`)                           |
-| `npm run lint:lambda`             | ESLint on `lambda/` `.mjs` handlers                             |
-| `npm run tsc:lambda`              | Type-check Lambda `.mjs` files via tsc                          |
-| `npm run format`                  | Prettier auto-format all files (`--write`)                      |
-| `npm run format:check`            | Prettier check (CI gate, no writes)                             |
-| `npm test`                        | Vitest run (frontend unit + integration)                        |
-| `npm run test:watch`              | Vitest in watch mode                                            |
-| `npm run test:coverage`           | Vitest with v8 coverage + thresholds                            |
-| `npm run test:lambda`             | `node --test` suites for every Lambda                           |
-| `npm run test:lambda:coverage`    | Lambda tests with coverage threshold check                      |
-| `npm run test:lambda:turbo`       | Run every Lambda's `test` task via Turborepo (cached, parallel) |
-| `npm run cy:run`                  | Cypress e2e (headless)                                          |
-| `npm run cy:open`                 | Cypress interactive runner                                      |
-| `npm run validate:agents`         | Check this file stays in sync with the code                     |
-| `npm run knip`                    | Dead code and unused dependency detection                       |
-| `npm run jscpd`                   | Duplicate code detection (threshold 5%)                         |
-| `npm run check:tech-debt`         | TODO/FIXME must link to an issue                                |
-| `npm run syncpack`                | Detect dependency version drift across workspaces               |
-| `npm run check:dep-age`           | Check dependency updates meet minimum release age               |
-| `npm run check:feature-flags`     | Detect dead or orphaned feature flags                           |
-| `npm run deploy:lambda -- <name>` | Deploy one Lambda (see Deployment)                              |
-| `npm run changelog`               | Preview changelog from conventional commits                     |
-| `npm run docs:api`                | Generate TypeScript API docs via TypeDoc (HTML)                 |
-| `npm run docs:openapi`            | Generate Lambda API reference markdown from OpenAPI specs       |
-| `npm run docs:gen`                | Generate all documentation (TypeDoc + OpenAPI markdown)         |
+| Command                                | What it does                                                                  |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| `npm run dev`                          | Vite dev server (localhost:5173)                                              |
+| `npm run build`                        | Full production pipeline (see below)                                          |
+| `npm run build:timed`                  | Build with per-step timing report                                             |
+| `npm run build:compare`                | Compare build timing vs previous CI run                                       |
+| `npm run bundle:size`                  | Measure + budget-check the built frontend bundle                              |
+| `npm run lambda:size`                  | Measure + budget-check every Lambda deployment package                        |
+| `npm run build:analyze`                | Interactive bundle treemap (vite-bundle-visualizer)                           |
+| `npm run preview`                      | Serve the production build locally                                            |
+| `npm run lint`                         | ESLint on `src/` (`--max-warnings 0`)                                         |
+| `npm run lint:lambda`                  | ESLint on `lambda/` `.mjs` handlers                                           |
+| `npm run tsc:lambda`                   | Type-check Lambda `.mjs` files via tsc                                        |
+| `npm run format`                       | Prettier auto-format all files (`--write`)                                    |
+| `npm run format:check`                 | Prettier check (CI gate, no writes)                                           |
+| `npm test`                             | Vitest run (frontend unit + integration)                                      |
+| `npm run test:watch`                   | Vitest in watch mode                                                          |
+| `npm run test:coverage`                | Vitest with v8 coverage + thresholds                                          |
+| `npm run test:lambda`                  | `node --test` suites for every Lambda                                         |
+| `npm run test:lambda:coverage`         | Lambda tests with coverage threshold check                                    |
+| `npm run test:lambda:turbo`            | Run every Lambda's `test` task via Turborepo (cached, parallel)               |
+| `npm run cy:run`                       | Cypress e2e (headless)                                                        |
+| `npm run cy:open`                      | Cypress interactive runner                                                    |
+| `npm run validate:agents`              | Check this file stays in sync with the code                                   |
+| `npm run knip`                         | Dead code and unused dependency detection                                     |
+| `npm run jscpd`                        | Duplicate code detection (threshold 5%)                                       |
+| `npm run check:tech-debt`              | TODO/FIXME must link to an issue                                              |
+| `npm run syncpack`                     | Detect dependency version drift across workspaces                             |
+| `npm run check:dep-age`                | Check dependency updates meet minimum release age                             |
+| `npm run check:feature-flags`          | Detect dead or orphaned feature flags                                         |
+| `npm run deploy:personal -- --dry-run` | Package every Lambda and validate the personal-account stack without writes   |
+| `npm run deploy:personal`              | Deploy all Lambda artifacts and the application stack to the personal account |
+| `npm run deploy:frontend:personal`     | Build and manually deploy the static frontend to personal-account Amplify     |
+| `npm run deploy:lambda -- <name>`      | Deploy one Lambda (see Deployment)                                            |
+| `npm run changelog`                    | Preview changelog from conventional commits                                   |
+| `npm run docs:api`                     | Generate TypeScript API docs via TypeDoc (HTML)                               |
+| `npm run docs:openapi`                 | Generate Lambda API reference markdown from OpenAPI specs                     |
+| `npm run docs:gen`                     | Generate all documentation (TypeDoc + OpenAPI markdown)                       |
 
 ### Build pipeline
 
@@ -155,6 +167,8 @@ lambda/kb-sync/      S3-triggered Bedrock KB ingestion
 lambda/metrics/      Web Vitals + CSP ingestion to CloudWatch (has GET /health)
 lambda/mcp-server/   Public MCP server (ask_alti, blog search)
 lambda/session-token/ Turnstile-gated short-lived token issuer
+lambda/contact-email/ Resend-backed contact form delivery
+lambda/newsletter-subscription/ Resend-backed newsletter subscriptions
 scripts/             Build-time generators + deploy/verify tooling
 docs/                Internal plans and runbooks
 ```
@@ -305,30 +319,41 @@ analytics or error tracking outside the logger).
 
 ## Deployment
 
-- **Frontend:** push to `main` triggers Amplify (app `d3du8eg39a9peo`, us-east-2).
-- **Lambdas:** never hand-zip. Use the verified script, which reinstalls from the
-  lockfile, dereferences `lambda-shared`, and smoke-checks the module graph before
-  upload:
+- **Frontend:** the foundation stack owns a manually deployed Amplify app and its
+  `main` branch. Run `npm run deploy:frontend:personal` to publish the static
+  frontend to the default Amplify domain. Do not attach the custom domain or
+  change DNS without explicit user direction.
+- **Lambdas:** use the personal-account deployer for a normal release. It packages
+  every Lambda, uploads immutable artifacts to the foundation bucket, and updates
+  the application stack. It reads provider secrets only from ignored
+  `infra/personal-account.env`; never commit that file.
 
 ```bash
-npm run deploy:lambda -- <name> --dry-run   # build + verify, no upload, no AWS call
-npm run deploy:lambda -- <name>             # asserts account 512880383078 (personal-dev), then deploys (default region us-east-1)
+npm run deploy:personal -- --dry-run  # package + validate, no resource or artifact writes
+npm run deploy:personal               # asserts qdev-personal / 973662476023, then deploys the stack
+npm run deploy:frontend:personal      # builds and deploys to the default Amplify domain, no DNS changes
 ```
+
+`npm run deploy:lambda -- <name>` remains available for targeted emergency
+code updates after the service stack exists; the next full personal deploy
+restores the stack-managed artifact version.
 
 ## Health checks
 
 Every deployed service has a health check mechanism:
 
-| Service        | Type        | Endpoint / Method                                     |
-| -------------- | ----------- | ----------------------------------------------------- |
-| Frontend (SPA) | Static file | `GET /health.json` (served by Amplify from `public/`) |
-| chat-stream    | HTTP        | `GET /health` (no auth)                               |
-| blueprint      | HTTP        | `GET /health` (no auth)                               |
-| kb-builder     | HTTP        | `GET /health` (no auth)                               |
-| metrics        | HTTP        | `GET /health` (Cognito-auth'd, returns 24h snapshot)  |
-| mcp-server     | HTTP        | `GET /health` (no auth)                               |
-| session-token  | HTTP        | `GET /` (no auth, returns service status)             |
-| kb-sync        | Event-based | `{"healthCheck":true}` payload via EventBridge or CLI |
+| Service                 | Type        | Endpoint / Method                                     |
+| ----------------------- | ----------- | ----------------------------------------------------- |
+| Frontend (SPA)          | Static file | `GET /health.json` (served by Amplify from `public/`) |
+| chat-stream             | HTTP        | `GET /health` (no auth)                               |
+| blueprint               | HTTP        | `GET /health` (no auth)                               |
+| kb-builder              | HTTP        | `GET /health` (no auth)                               |
+| metrics                 | HTTP        | `GET /health` (Cognito-auth'd, returns 24h snapshot)  |
+| mcp-server              | HTTP        | `GET /health` (no auth)                               |
+| session-token           | HTTP        | `GET /` (no auth, returns service status)             |
+| contact-email           | HTTP        | `GET /` (no auth, returns service status)             |
+| newsletter-subscription | HTTP        | `GET /` (no auth, returns service status)             |
+| kb-sync                 | Event-based | `{"healthCheck":true}` payload via EventBridge or CLI |
 
 The frontend health check is a static JSON file (`public/health.json`) that
 Amplify serves at the `/health.json` path. It provides a liveness probe for
@@ -414,6 +439,8 @@ contract, auth, request/response schemas, and status codes:
 - `lambda/metrics/openapi.yaml` - Web Vitals / CSP ingestion + Cognito health
 - `lambda/mcp-server/openapi.yaml` - JSON-RPC 2.0 MCP endpoint + health
 - `lambda/session-token/openapi.yaml` - Turnstile-gated token issuer
+- `lambda/contact-email/openapi.yaml` - Resend-backed contact form delivery
+- `lambda/newsletter-subscription/openapi.yaml` - Resend-backed newsletter subscriptions
 - `src/openapi.yaml` - frontend health endpoint + consumed API references
 
 When you change a handler's routes or payloads, update its spec so the contract

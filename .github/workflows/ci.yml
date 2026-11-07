@@ -103,7 +103,7 @@ jobs:
           # shared installed first so file:../shared dependents resolve a fresh copy.
           # --no-workspaces: install locally in each Lambda dir, not hoisted to root.
           # --ignore-scripts: skip root prepare (husky) which is irrelevant for Lambdas.
-          for dir in lambda/shared lambda/chat-stream lambda/blueprint lambda/kb-builder lambda/metrics lambda/kb-sync lambda/mcp-server lambda/session-token; do
+          for dir in lambda/shared lambda/chat-stream lambda/blueprint lambda/kb-builder lambda/metrics lambda/kb-sync lambda/mcp-server lambda/session-token lambda/contact-email lambda/newsletter-subscription; do
             echo "=== Installing $dir ==="
             if [ -f "$dir/package-lock.json" ]; then
               (cd "$dir" && npm ci --no-audit --no-fund --no-workspaces --ignore-scripts)
@@ -246,7 +246,7 @@ jobs:
         run: |
           set -e
           # Keep this dir list in sync with the "Install Lambda dependencies" step above.
-          for dir in lambda/chat-stream lambda/blueprint lambda/kb-builder lambda/metrics lambda/kb-sync lambda/mcp-server lambda/session-token; do
+          for dir in lambda/chat-stream lambda/blueprint lambda/kb-builder lambda/metrics lambda/kb-sync lambda/mcp-server lambda/session-token lambda/contact-email lambda/newsletter-subscription; do
             if [ ! -f "$dir/package.json" ]; then
               echo "=== Skipping $dir (no package.json) ==="
               continue

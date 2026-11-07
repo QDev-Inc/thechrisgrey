@@ -1,0 +1,121 @@
+openapi: 3.1.0
+info:
+  title: thechrisgrey Contact Email API
+  version: 1.0.0
+  description: Turnstile-protected contact form delivery through Resend.
+paths:
+  /:
+    get:
+      summary: Service health
+      responses:
+        '200':
+          description: Service is reachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+    post:
+      summary: Send a contact message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactRequest'
+      responses:
+        '202':
+          description: The message was accepted for delivery. Honeypot submissions receive the same response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          $ref: '#/components/responses/DeliveryUnavailable'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [ok, service, version]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        service:
+          type: string
+          const: contact-email
+        version:
+          type: string
+    ContactRequest:
+      type: object
+      required: [name, email, message]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        message:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        website:
+          type: string
+          description: Hidden honeypot field. Real visitors leave it empty.
+        turnstileToken:
+          type: string
+          description: One-time Cloudflare Turnstile token, required when Turnstile is configured.
+    AcceptedResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+  responses:
+    InvalidRequest:
+      description: The body was malformed or did not meet validation rules.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The origin is not allowed or Turnstile verification failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: The sender exceeded the per-IP rate limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    DeliveryUnavailable:
+      description: Resend did not accept the delivery request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: The service is missing its delivery configuration.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

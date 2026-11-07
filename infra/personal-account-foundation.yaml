@@ -1,0 +1,437 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Durable data, identity, and Bedrock foundation for thechrisgrey in one AWS
+  account. This stack deliberately does not manage a public domain or deploy
+  Lambda code.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: thechrisgrey
+    AllowedPattern: '^[a-z0-9-]+$'
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${ProjectName}-${AWS::AccountId}-${AWS::Region}-artifacts'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireSupersededArtifacts
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  KnowledgeBaseSourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${ProjectName}-${AWS::AccountId}-${AWS::Region}-kb-source'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  PodcastKnowledgeBaseSourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${ProjectName}-${AWS::AccountId}-${AWS::Region}-podcast-source'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  RateLimitTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub '${ProjectName}-chat-ratelimit'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  ChatMemoryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub '${ProjectName}-chat-memory'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceHash
+          AttributeType: S
+        - AttributeName: factId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deviceHash
+          KeyType: HASH
+        - AttributeName: factId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  MainVectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VectorBucketName: !Sub '${ProjectName}-${AWS::AccountId}-${AWS::Region}-main-vectors'
+
+  MainVectorIndex:
+    Type: AWS::S3Vectors::Index
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VectorBucketArn: !GetAtt MainVectorBucket.VectorBucketArn
+      IndexName: main-kb-index
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+          - AMAZON_BEDROCK_TEXT
+          - AMAZON_BEDROCK_METADATA
+
+  PodcastVectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VectorBucketName: !Sub '${ProjectName}-${AWS::AccountId}-${AWS::Region}-podcast-vectors'
+
+  PodcastVectorIndex:
+    Type: AWS::S3Vectors::Index
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VectorBucketArn: !GetAtt PodcastVectorBucket.VectorBucketArn
+      IndexName: podcast-kb-index
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+          - AMAZON_BEDROCK_TEXT
+          - AMAZON_BEDROCK_METADATA
+
+  KnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-knowledge-base-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*'
+      Policies:
+        - PolicyName: KnowledgeBaseAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: EmbedDocuments
+                Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0'
+              - Sid: ReadKnowledgeBaseSources
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt KnowledgeBaseSourceBucket.Arn
+                  - !GetAtt PodcastKnowledgeBaseSourceBucket.Arn
+              - Sid: ReadKnowledgeBaseObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub '${KnowledgeBaseSourceBucket.Arn}/*'
+                  - !Sub '${PodcastKnowledgeBaseSourceBucket.Arn}/*'
+              - Sid: ReadAndWriteVectors
+                Effect: Allow
+                Action:
+                  - s3vectors:PutVectors
+                  - s3vectors:GetVectors
+                  - s3vectors:DeleteVectors
+                  - s3vectors:QueryVectors
+                  - s3vectors:GetIndex
+                Resource:
+                  - !GetAtt MainVectorIndex.IndexArn
+                  - !GetAtt PodcastVectorIndex.IndexArn
+
+  MainKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub '${ProjectName}-main'
+      Description: Grounded material about Christian Perez and the site.
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0'
+      StorageConfiguration:
+        Type: S3_VECTORS
+        S3VectorsConfiguration:
+          IndexArn: !GetAtt MainVectorIndex.IndexArn
+
+  MainKnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      KnowledgeBaseId: !Ref MainKnowledgeBase
+      Name: main-site-source
+      Description: Source documents under content/ in the private site knowledge-base bucket.
+      DataDeletionPolicy: RETAIN
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeBaseSourceBucket.Arn
+          InclusionPrefixes:
+            - content/
+
+  PodcastKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub '${ProjectName}-podcast'
+      Description: Grounded transcripts and metadata for The Vector Podcast.
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0'
+      StorageConfiguration:
+        Type: S3_VECTORS
+        S3VectorsConfiguration:
+          IndexArn: !GetAtt PodcastVectorIndex.IndexArn
+
+  PodcastKnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      KnowledgeBaseId: !Ref PodcastKnowledgeBase
+      Name: podcast-source
+      Description: Podcast transcripts under content/ in the private podcast source bucket.
+      DataDeletionPolicy: RETAIN
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt PodcastKnowledgeBaseSourceBucket.Arn
+          InclusionPrefixes:
+            - content/
+
+  ChatGuardrail:
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: !Sub '${ProjectName}-chat'
+      Description: Input and output safety policy for the public Alti assistant.
+      BlockedInputMessaging: I cannot help with that request.
+      BlockedOutputsMessaging: I cannot provide that response.
+      ContentPolicyConfig:
+        FiltersConfig:
+          - Type: HATE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: INSULTS
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: SEXUAL
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: VIOLENCE
+            InputStrength: MEDIUM
+            OutputStrength: MEDIUM
+          - Type: MISCONDUCT
+            InputStrength: MEDIUM
+            OutputStrength: MEDIUM
+          - Type: PROMPT_ATTACK
+            InputStrength: HIGH
+            OutputStrength: NONE
+
+  AdminUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${ProjectName}-admin'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      MfaConfiguration: 'OFF'
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 16
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+          TemporaryPasswordValidityDays: 3
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  AdminUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${ProjectName}-admin-web'
+      UserPoolId: !Ref AdminUserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Ref ProjectName
+      Description: Static hosting for thechrisgrey.com before custom-domain cutover.
+      Platform: WEB
+      CustomRules:
+        - Source: '/<*>'
+          Target: '/index.html'
+          Status: '404-200'
+
+  AmplifyProductionBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+      Description: Manually deployed production branch before Git-based CI/CD is connected.
+      EnableAutoBuild: false
+      Stage: PRODUCTION
+
+Outputs:
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactBucketName'
+  KnowledgeBaseSourceBucketName:
+    Value: !Ref KnowledgeBaseSourceBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-KnowledgeBaseSourceBucketName'
+  PodcastKnowledgeBaseSourceBucketName:
+    Value: !Ref PodcastKnowledgeBaseSourceBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-PodcastKnowledgeBaseSourceBucketName'
+  RateLimitTableName:
+    Value: !Ref RateLimitTable
+    Export:
+      Name: !Sub '${AWS::StackName}-RateLimitTableName'
+  RateLimitTableArn:
+    Value: !GetAtt RateLimitTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-RateLimitTableArn'
+  ChatMemoryTableName:
+    Value: !Ref ChatMemoryTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ChatMemoryTableName'
+  ChatMemoryTableArn:
+    Value: !GetAtt ChatMemoryTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ChatMemoryTableArn'
+  MainKnowledgeBaseId:
+    Value: !Ref MainKnowledgeBase
+    Export:
+      Name: !Sub '${AWS::StackName}-MainKnowledgeBaseId'
+  MainKnowledgeBaseDataSourceId:
+    Value: !Select [1, !Split ['|', !Ref MainKnowledgeBaseDataSource]]
+    Export:
+      Name: !Sub '${AWS::StackName}-MainKnowledgeBaseDataSourceId'
+  PodcastKnowledgeBaseId:
+    Value: !Ref PodcastKnowledgeBase
+    Export:
+      Name: !Sub '${AWS::StackName}-PodcastKnowledgeBaseId'
+  PodcastKnowledgeBaseDataSourceId:
+    Value: !Select [1, !Split ['|', !Ref PodcastKnowledgeBaseDataSource]]
+    Export:
+      Name: !Sub '${AWS::StackName}-PodcastKnowledgeBaseDataSourceId'
+  GuardrailId:
+    Value: !GetAtt ChatGuardrail.GuardrailId
+    Export:
+      Name: !Sub '${AWS::StackName}-GuardrailId'
+  GuardrailVersion:
+    Value: !GetAtt ChatGuardrail.Version
+    Export:
+      Name: !Sub '${AWS::StackName}-GuardrailVersion'
+  AdminUserPoolId:
+    Value: !Ref AdminUserPool
+    Export:
+      Name: !Sub '${AWS::StackName}-AdminUserPoolId'
+  AdminUserPoolClientId:
+    Value: !Ref AdminUserPoolClient
+    Export:
+      Name: !Sub '${AWS::StackName}-AdminUserPoolClientId'
+  AmplifyAppId:
+    Value: !GetAtt AmplifyApp.AppId
+  AmplifyDefaultDomain:
+    Value: !GetAtt AmplifyApp.DefaultDomain
+  AmplifyMainBranchUrl:
+    Value: !Sub 'https://main.${AmplifyApp.DefaultDomain}'

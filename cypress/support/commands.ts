@@ -131,8 +131,14 @@ Cypress.Commands.add('stubChatEndpoint', () => {
 Cypress.Commands.add('stubContactEndpoint', () => {
   // Matches the contact Function URL in local/prod builds and the CI placeholder
   // endpoint alike — see BACKEND_POST_URL.
-  cy.intercept('POST', BACKEND_POST_URL, {
-    statusCode: 200,
-    body: { message: 'Message sent successfully' },
-  }).as('contactSubmit');
+  cy.intercept('POST', BACKEND_POST_URL, (request) => {
+    // Metrics posts share the CI placeholder URL; alias only contact payloads.
+    if (typeof request.body?.email === 'string' && typeof request.body?.message === 'string') {
+      request.alias = 'contactSubmit';
+    }
+    request.reply({
+      statusCode: 200,
+      body: { message: 'Message sent successfully' },
+    });
+  });
 });

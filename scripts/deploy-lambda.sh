@@ -5,8 +5,8 @@
 # Usage:
 #   bash scripts/deploy-lambda.sh <name> [--region us-east-1] [--dry-run]
 #   npm run deploy:lambda -- <name> [--region us-east-1] [--dry-run]
-#   Deploys as profile personal-dev and refuses unless the caller account is
-#   Delta Centric 512880383078 (scripts/lib/aws-preflight.sh). A --dry-run makes
+#   Deploys as profile qdev-personal and refuses unless the caller account is
+#   Christian Perez - Personal Account 973662476023 (scripts/lib/aws-preflight.sh). A --dry-run makes
 #   no AWS call.
 #
 # What it guarantees over the old hand-typed `zip` commands:

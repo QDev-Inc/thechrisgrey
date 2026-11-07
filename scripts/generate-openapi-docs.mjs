@@ -29,6 +29,8 @@ const SPECS = [
   'lambda/metrics/openapi.yaml',
   'lambda/mcp-server/openapi.yaml',
   'lambda/session-token/openapi.yaml',
+  'lambda/contact-email/openapi.yaml',
+  'lambda/newsletter-subscription/openapi.yaml',
   'src/openapi.yaml',
 ];
 
