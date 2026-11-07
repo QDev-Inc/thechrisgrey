@@ -145,7 +145,10 @@ describe('Contact Page', () => {
     );
     cy.get('button[type="submit"]').click();
 
-    cy.wait('@contactSubmit').its('request.body.turnstileToken').should('eq', TURNSTILE_TOKEN);
+    cy.wait('@contactSubmit').then(({ request }) => {
+      const body = typeof request.body === 'string' ? JSON.parse(request.body) : request.body;
+      expect(body).to.have.property('turnstileToken', TURNSTILE_TOKEN);
+    });
 
     // Success modal should appear
     cy.get('[role="dialog"]').should('be.visible');
