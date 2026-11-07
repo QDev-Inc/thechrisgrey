@@ -23,45 +23,12 @@ import { checkRateLimit } from "lambda-shared/rateLimit";
 import { DEVICE_ID_PATTERN, hashDeviceId } from "lambda-shared/deviceId";
 import { issueSessionToken } from "lambda-shared/sessionToken";
 import { createLogger } from "lambda-shared/logger";
-import { withTimeout } from "lambda-shared/timeout";
+import { verifyTurnstile } from "lambda-shared/turnstile";
 import { MetricsCollector } from "lambda-shared/metrics";
 import { setRequestContext, captureError, addBreadcrumb, flushSentry } from "lambda-shared/errorTracking";
 import { captureProductEvent, flushProductAnalytics } from "lambda-shared/productAnalytics";
 
-const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
-/**
- * Verify a Cloudflare Turnstile token against the siteverify endpoint.
- * Fails CLOSED (returns false) on any network/parse error — a token can only be
- * minted when Cloudflare affirmatively confirms the challenge.
- * @param {string} token   - the cf-turnstile-response from the client
- * @param {string} secret  - the Turnstile secret key (server-only)
- * @param {string} [remoteip]
- * @param {typeof fetch} [fetchImpl=fetch]
- * @returns {Promise<boolean>}
- */
-export async function verifyTurnstile(token, secret, remoteip, fetchImpl = fetch) {
-  try {
-    const form = new URLSearchParams();
-    form.set("secret", secret);
-    form.set("response", token || "");
-    if (remoteip) form.set("remoteip", remoteip);
-
-    const res = await withTimeout(
-      fetchImpl(TURNSTILE_VERIFY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: form.toString(),
-      }),
-      5000,
-      "turnstile_verify",
-    );
-    const data = /** @type {any} */ (await res.json());
-    return data?.success === true;
-  } catch {
-    return false;
-  }
-}
+export { verifyTurnstile } from "lambda-shared/turnstile";
 
 /**
  * Build the issuer handler from injected dependencies.

@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+const { mockGetTurnstileToken } = vi.hoisted(() => ({
+  mockGetTurnstileToken: vi.fn(),
+}));
+
+vi.mock('../../utils/turnstile', () => ({
+  getTurnstileToken: mockGetTurnstileToken,
+}));
+
 /**
  * The Waitlist component reads `import.meta.env.VITE_NEWSLETTER_ENDPOINT`
  * at module-load time. To exercise the fetch-driven success/error branches
@@ -30,6 +38,7 @@ const mockFetch = vi.fn();
 describe('Waitlist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTurnstileToken.mockResolvedValue('turnstile-token');
     vi.stubGlobal('fetch', mockFetch);
   });
 
@@ -131,6 +140,7 @@ describe('Waitlist', () => {
       expect(JSON.parse(calledInit.body as string)).toEqual({
         email: 'visitor@example.com',
         source: 'blueprint',
+        turnstileToken: 'turnstile-token',
       });
     });
 

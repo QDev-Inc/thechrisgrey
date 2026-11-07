@@ -21,6 +21,8 @@ export { isProductAnalyticsInitialized, captureProductEvent, flushProductAnalyti
 export { DEVICE_ID_PATTERN, validateDeviceId, hashDeviceId } from "./deviceId.mjs";
 export { EMAIL_PATTERN_SOURCE, PHONE_PATTERN_SOURCE } from "./pii.mjs";
 export { runRetrieve } from "./bedrockRetrieve.mjs";
+export { verifyTurnstile } from "./turnstile.mjs";
+export { readSecretString } from "./secrets.mjs";
 export { RATE_LIMIT_TABLE_SCHEMA, SHARED_DYNAMODB_TABLE_SCHEMAS } from "./dynamoDbSchemas.mjs";
 export {
   SITE_ORIGIN,

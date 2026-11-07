@@ -5,6 +5,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { trackEvent } from '../utils/analytics';
 import { createLogger } from '../utils/logger';
 import { withTraceId } from '../utils/traceId';
+import { getTurnstileToken } from '../utils/turnstile';
 import { slugify } from '../utils/slugify';
 import Icon from './icons/Icon';
 
@@ -50,10 +51,12 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
 
     setSubscribeStatus({ type: 'loading', message: 'Subscribing...' });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
+      const turnstileToken = await getTurnstileToken();
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(
         import.meta.env.VITE_NEWSLETTER_ENDPOINT,
         withTraceId({
@@ -63,6 +66,7 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
           },
           body: JSON.stringify({
             email: subscribeEmail.trim(),
+            turnstileToken,
           }),
           signal: controller.signal,
         }),
@@ -100,7 +104,7 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
         });
       }
     } finally {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
     }
   };
 

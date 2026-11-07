@@ -29,6 +29,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Pin every lookup to the personal account before checking live state.
+. "$(dirname "$0")/lib/aws-preflight.sh"
+tcg_aws_preflight
+
 PASS=0
 FAIL=0
 SKIP=0
@@ -83,19 +87,30 @@ echo ""
 
 echo "--- Lambda Health Endpoints ---"
 
-# MCP server health (public, no auth needed)
-MCP_ENDPOINT="${MCP_ENDPOINT:-https://sytc64zth4weo5rn4a5zjtzfai0xynwg.lambda-url.us-east-1.on.aws}"
-MCP_HEALTH_URL="${MCP_ENDPOINT}/health"
+# MCP server health (public, no auth needed). Resolve the current Function URL
+# from the service stack, never from a retired-account endpoint.
+if [[ -z "${MCP_ENDPOINT:-}" ]]; then
+  MCP_ENDPOINT="$(aws cloudformation describe-stacks \
+    --region "$REGION" \
+    --stack-name thechrisgrey-services \
+    --query 'Stacks[0].Outputs[?OutputKey==`McpServerEndpoint`].OutputValue | [0]' \
+    --output text 2>/dev/null || true)"
+fi
 
-MCP_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$MCP_HEALTH_URL" 2>/dev/null || echo "000")
-if [[ "$MCP_RESPONSE" == "200" ]]; then
-  MCP_BODY=$(curl -s --connect-timeout 5 --max-time 10 "$MCP_HEALTH_URL" 2>/dev/null || echo "{}")
-  MCP_SERVER=$(echo "$MCP_BODY" | grep -o '"server":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-  report_pass "MCP server /health" "200, server=$MCP_SERVER"
-elif [[ "$MCP_RESPONSE" == "000" ]]; then
-  report_skip "MCP server /health" "could not connect to $MCP_HEALTH_URL"
+if [[ -z "$MCP_ENDPOINT" || "$MCP_ENDPOINT" == "None" ]]; then
+  report_skip "MCP server /health" "thechrisgrey-services is not deployed or MCP_ENDPOINT is unset"
 else
-  report_fail "MCP server /health" "HTTP $MCP_RESPONSE"
+  MCP_HEALTH_URL="${MCP_ENDPOINT%/}/health"
+  MCP_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$MCP_HEALTH_URL" 2>/dev/null || echo "000")
+  if [[ "$MCP_RESPONSE" == "200" ]]; then
+    MCP_BODY=$(curl -s --connect-timeout 5 --max-time 10 "$MCP_HEALTH_URL" 2>/dev/null || echo "{}")
+    MCP_SERVER=$(echo "$MCP_BODY" | grep -o '"server":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    report_pass "MCP server /health" "200, server=$MCP_SERVER"
+  elif [[ "$MCP_RESPONSE" == "000" ]]; then
+    report_skip "MCP server /health" "could not connect to $MCP_HEALTH_URL"
+  else
+    report_fail "MCP server /health" "HTTP $MCP_RESPONSE"
+  fi
 fi
 
 # Metrics Lambda health (Cognito-auth'd, skip if no token)
@@ -123,14 +138,17 @@ echo ""
 
 echo "--- Frontend ---"
 
-SITE_URL="${SITE_URL:-https://thechrisgrey.com}"
-SITE_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$SITE_URL" 2>/dev/null || echo "000")
-if [[ "$SITE_RESPONSE" == "200" ]]; then
-  report_pass "Frontend ($SITE_URL)" "200"
-elif [[ "$SITE_RESPONSE" == "000" ]]; then
-  report_fail "Frontend ($SITE_URL)" "could not connect"
+if [[ -z "${SITE_URL:-}" ]]; then
+  report_skip "Frontend" "SITE_URL is unset; the personal-account Amplify app has not been promoted"
 else
-  report_fail "Frontend ($SITE_URL)" "HTTP $SITE_RESPONSE"
+  SITE_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$SITE_URL" 2>/dev/null || echo "000")
+  if [[ "$SITE_RESPONSE" == "200" ]]; then
+    report_pass "Frontend ($SITE_URL)" "200"
+  elif [[ "$SITE_RESPONSE" == "000" ]]; then
+    report_fail "Frontend ($SITE_URL)" "could not connect"
+  else
+    report_fail "Frontend ($SITE_URL)" "HTTP $SITE_RESPONSE"
+  fi
 fi
 
 echo ""
@@ -151,6 +169,8 @@ LAMBDA_FUNCTIONS=(
   "thechrisgrey-metrics"
   "thechrisgrey-mcp-server"
   "thechrisgrey-session-token"
+  "thechrisgrey-contact-email"
+  "thechrisgrey-newsletter-subscription"
 )
 
 ERROR_THRESHOLD=5

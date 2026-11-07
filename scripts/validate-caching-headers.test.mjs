@@ -90,8 +90,8 @@ describe('caching and third-party script config', () => {
 
   describe('VAL-PERF-008 — preconnect set covers used origins, no dead preconnects', () => {
     // Origins that are preconnected globally in index.html (used on every
-    // page within 10s). Page-specific origins (cdn.sanity.io, i.ytimg.com,
-    // d1x8296f4gso9u.cloudfront.net) are injected per-route by SEO.tsx and
+    // page within 10s). Page-specific origins (cdn.sanity.io, i.ytimg.com) are
+    // injected per-route by SEO.tsx and
     // therefore must NOT appear in the static shell.
     const globalPreconnects = [
       'https://plausible.io',
@@ -107,11 +107,7 @@ describe('caching and third-party script config', () => {
     ];
     // Page-specific preconnects — injected per-route by SEO.tsx, so they must
     // NOT be in the global shell (which would put them on every page).
-    const pageSpecificPreconnects = [
-      'https://cdn.sanity.io',
-      'https://i.ytimg.com',
-      'https://d1x8296f4gso9u.cloudfront.net',
-    ];
+    const pageSpecificPreconnects = ['https://cdn.sanity.io', 'https://i.ytimg.com'];
 
     const preconnectHrefs = () =>
       [...indexHtml.matchAll(/<link\s+[^>]*rel="preconnect"[^>]*href="([^"]+)"/gi)].map((m) => m[1]);

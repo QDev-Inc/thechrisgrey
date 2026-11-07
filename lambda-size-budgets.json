@@ -8,6 +8,8 @@
     "metrics": { "maxUnzippedMB": 75, "maxZippedMB": 22 },
     "kb-sync": { "maxUnzippedMB": 70, "maxZippedMB": 21 },
     "mcp-server": { "maxUnzippedMB": 85, "maxZippedMB": 27 },
-    "session-token": { "maxUnzippedMB": 70, "maxZippedMB": 21 }
+    "session-token": { "maxUnzippedMB": 70, "maxZippedMB": 21 },
+    "contact-email": { "maxUnzippedMB": 70, "maxZippedMB": 21 },
+    "newsletter-subscription": { "maxUnzippedMB": 70, "maxZippedMB": 21 }
   }
 }

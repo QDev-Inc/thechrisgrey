@@ -45,7 +45,6 @@
          by the SEO component (src/components/SEO.tsx) from src/routes.ts
          `preconnects` metadata so each prerendered page preconnects to exactly
          the origins it uses:
-           - d1x8296f4gso9u.cloudfront.net (hero video) -> Home only
            - cdn.sanity.io (Sanity CDN images) -> /blog, /podcast, /blog/:slug
            - i.ytimg.com (YouTube thumbnails) -> /podcast + blog posts that
              embed a YouTube facade (injected by YouTubeFacade itself)
@@ -63,13 +62,6 @@
     <link rel="dns-prefetch" href="https://altivum.ai" />
     <link rel="dns-prefetch" href="https://vector.altivum.ai" />
     <link rel="dns-prefetch" href="https://logic.altivum.ai" />
-
-    <!-- Preload the hero poster (the prerendered home LCP element). The poster
-         is the <img> rendered in the reduced-motion / prerender path, so
-         preloading it here lets the browser start the request before the JS
-         bundle parses. fetchpriority=high tells the browser this is the LCP
-         candidate. The asset lives in public/ so the URL is stable. -->
-    <link rel="preload" as="image" href="/hero-intro-poster.webp" fetchpriority="high" />
 
     <!-- RSS Feed -->
     <link

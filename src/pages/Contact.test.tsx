@@ -16,6 +16,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import Contact from './Contact';
 
+const { mockGetTurnstileToken } = vi.hoisted(() => ({
+  mockGetTurnstileToken: vi.fn(),
+}));
+
+vi.mock('../utils/turnstile', () => ({
+  getTurnstileToken: mockGetTurnstileToken,
+}));
+
 const renderContactAt = (url: string) => {
   return render(
     <HelmetProvider>
@@ -31,6 +39,7 @@ describe('Contact query-param handoff (Alti draft_message)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTurnstileToken.mockResolvedValue('turnstile-token');
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
@@ -151,6 +160,7 @@ describe('Contact multi-intent flow', () => {
     expect(body.message).toContain('Event date: 2026-09-15');
     expect(body.message).toContain('Audience size: 200-500');
     expect(body.message).toContain('Event format: Keynote');
+    expect(body.turnstileToken).toBe('turnstile-token');
   });
 
   it('clears event-specific fields after a successful submission', async () => {

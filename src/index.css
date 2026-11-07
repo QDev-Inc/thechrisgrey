@@ -1,9 +1,17 @@
 @import 'tailwindcss';
 
+@font-face {
+  font-family: 'Montserrat Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@fontsource-variable/montserrat/files/montserrat-latin-wght-normal.woff2') format('woff2');
+}
+
 @theme {
-  --font-sans: 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
-  --font-serif: 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Montserrat Variable', 'Montserrat', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+  --font-serif: 'Montserrat Variable', 'Montserrat', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Montserrat Variable', 'Montserrat', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
 
   --font-weight-ultralight: 200;
   --font-weight-light: 300;

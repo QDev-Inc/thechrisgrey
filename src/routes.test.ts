@@ -220,8 +220,8 @@ describe('Navigation ↔ ROUTES drift detector', () => {
  * origins it needs, with no dead or unused preconnects.
  */
 describe('preconnectsForPath — per-route preconnect resolution (VAL-PERF-008)', () => {
-  it('Home preconnects to the CloudFront hero video origin only', () => {
-    expect(preconnectsForPath('/')).toEqual(['https://d1x8296f4gso9u.cloudfront.net']);
+  it('Home does not preconnect to a retired hero-media origin', () => {
+    expect(preconnectsForPath('/')).toEqual([]);
   });
 
   it('/podcast preconnects to the podcast project API CDN and the Sanity asset CDN', () => {

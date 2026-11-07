@@ -13,10 +13,10 @@
  * Then it stages + syncs + starts the KB ingestion job.
  *
  * Env:
- *   THECHRISGREY_AWS_PROFILE   default: personal-dev (only value accepted); account 512880383078 asserted first
- *   PODCAST_KB_ID              default: AFLBVXFPUZ
- *   PODCAST_KB_DATA_SOURCE_ID  default: UG78ZHKEUN
- *   PODCAST_KB_SOURCE_BUCKET   default: thechrisgrey-kb-podcast-source-512880383078
+ *   THECHRISGREY_AWS_PROFILE   default: qdev-personal (account 973662476023 asserted first)
+ *   PODCAST_KB_ID              default: current foundation stack output
+ *   PODCAST_KB_DATA_SOURCE_ID  default: current foundation stack output
+ *   PODCAST_KB_SOURCE_BUCKET   default: current foundation stack output
  *   AWS_REGION                 default: us-east-1
  *
  * Usage: node scripts/transcribe-podcast.mjs
@@ -27,15 +27,16 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { pinAwsAccount } from './lib/aws-preflight.mjs';
+import { getFoundationOutputs, pinAwsAccount } from './lib/aws-preflight.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const HOME = pinAwsAccount(); // asserts the account before any AWS call
+const FOUNDATION = getFoundationOutputs();
 const REGION = process.env.AWS_REGION || 'us-east-1';
-const KB_ID = process.env.PODCAST_KB_ID || HOME.podcastKbId;
-const DS_ID = process.env.PODCAST_KB_DATA_SOURCE_ID || HOME.podcastDataSourceId;
-const SRC_BUCKET = process.env.PODCAST_KB_SOURCE_BUCKET || HOME.podcastSourceBucket;
+const KB_ID = process.env.PODCAST_KB_ID || FOUNDATION.PodcastKnowledgeBaseId;
+const DS_ID = process.env.PODCAST_KB_DATA_SOURCE_ID || FOUNDATION.PodcastKnowledgeBaseDataSourceId;
+const SRC_BUCKET = process.env.PODCAST_KB_SOURCE_BUCKET || FOUNDATION.PodcastKnowledgeBaseSourceBucketName;
 const RSS_URL = 'https://api.riverside.fm/hosting/heA0qRHh.rss';
 const TMP_BUCKET = `thechrisgrey-transcribe-tmp-${HOME.account}`;
 const TRANSCRIPTS_DIR = join(ROOT, 'podcast-transcripts');

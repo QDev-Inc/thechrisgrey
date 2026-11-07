@@ -6,6 +6,14 @@ import { HelmetProvider } from 'react-helmet-async';
 import Contact from '../../pages/Contact';
 import { SOCIAL_LINKS } from '../../constants/links';
 
+const { mockGetTurnstileToken } = vi.hoisted(() => ({
+  mockGetTurnstileToken: vi.fn(),
+}));
+
+vi.mock('../../utils/turnstile', () => ({
+  getTurnstileToken: mockGetTurnstileToken,
+}));
+
 const renderContact = () => {
   return render(
     <HelmetProvider>
@@ -21,6 +29,7 @@ describe('Contact Page Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTurnstileToken.mockResolvedValue('turnstile-token');
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
@@ -427,6 +436,7 @@ describe('Contact Page Integration', () => {
       expect(body.email).toBe('test@example.com');
       expect(body.message).toContain('Test Subject');
       expect(body.message).toContain('This is a valid message for testing.');
+      expect(body.turnstileToken).toBe('turnstile-token');
       // Honeypot should be empty
       expect(body.website).toBe('');
     });

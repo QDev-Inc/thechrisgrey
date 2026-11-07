@@ -21,7 +21,9 @@
     "./deviceId": "./deviceId.mjs",
     "./pii": "./pii.mjs",
     "./bedrockRetrieve": "./bedrockRetrieve.mjs",
-    "./dynamoDbSchemas": "./dynamoDbSchemas.mjs"
+    "./dynamoDbSchemas": "./dynamoDbSchemas.mjs",
+    "./turnstile": "./turnstile.mjs",
+    "./secrets": "./secrets.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.1068.0",

@@ -29,6 +29,8 @@ const TEST_FILES = [
   'lambda/kb-builder/__tests__/*.test.mjs',
   'lambda/kb-sync/__tests__/*.test.mjs',
   'lambda/session-token/__tests__/*.test.mjs',
+  'lambda/contact-email/__tests__/*.test.mjs',
+  'lambda/newsletter-subscription/__tests__/*.test.mjs',
 ].join(' ');
 
 const CMD = `node --test --experimental-test-coverage --test-reporter=spec ${TEST_FILES} 2>&1`;

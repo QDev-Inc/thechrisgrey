@@ -33,27 +33,19 @@ describe('Home Page Integration', () => {
   });
 
   describe('Hero section', () => {
-    it('renders the animated brand-intro video from the CloudFront source', () => {
+    it('renders the bento hero without the retired video dependency', () => {
       const { container } = renderHome();
-      const video = container.querySelector('section video');
-      expect(video).toBeInTheDocument();
-      expect(video).toHaveAttribute('src', 'https://d1x8296f4gso9u.cloudfront.net/thechrisgrey/hero-h264.mp4');
-      // Decorative — page identity is carried by the sr-only <h1>.
-      expect(video).toHaveAttribute('aria-hidden', 'true');
-    });
-
-    it('reserves the hero media box with intrinsic width and height (CLS)', () => {
-      const { container } = renderHome();
-      const video = container.querySelector('section video');
-      expect(video).toHaveAttribute('width', '1920');
-      expect(video).toHaveAttribute('height', '1080');
+      expect(container.querySelector('section video')).toBeNull();
+      expect(screen.getByText(/founder.*operator.*builder/i)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /the story/i })).toHaveAttribute('href', '/about');
+      expect(screen.getByRole('link', { name: /start a conversation/i })).toHaveAttribute('href', '/contact');
     });
 
     it('renders an accessible h1 heading for screen readers', () => {
       renderHome();
       const heading = screen.getByRole('heading', {
         level: 1,
-        name: /christian perez.*leadership forged in service/i,
+        name: /christian perez/i,
       });
       expect(heading).toBeInTheDocument();
     });
@@ -76,7 +68,7 @@ describe('Home Page Integration', () => {
 
     it('renders all 5 key points with correct subtitles', () => {
       renderHome();
-      expect(screen.getByText('Christian Perez')).toBeInTheDocument();
+      expect(screen.getAllByText('Christian Perez')).toHaveLength(2);
       expect(screen.getByText('Founder & CEO')).toBeInTheDocument();
       expect(screen.getByText('Host')).toBeInTheDocument();
       expect(screen.getByText('Author')).toBeInTheDocument();
@@ -98,10 +90,15 @@ describe('Home Page Integration', () => {
 
     it('renders the profile image inside a responsive <picture>', () => {
       renderHome();
-      const profileImage = screen.getByAltText('Christian Perez');
-      expect(profileImage).toBeInTheDocument();
-      // The <img> fallback lives inside a <picture> with AVIF + WebP sources.
-      const picture = profileImage.closest('picture');
+      const scrollSectionImage = screen
+        .getAllByAltText('Christian Perez')
+        .find((image) => image.getAttribute('src') === '/mock-profile1.jpeg');
+
+      expect(scrollSectionImage).toBeDefined();
+
+      // The scroll section uses responsive AVIF and WebP variants to limit its
+      // full-viewport image cost. The hero intentionally uses a distinct press-kit image.
+      const picture = scrollSectionImage?.closest('picture');
       expect(picture).not.toBeNull();
       expect(picture?.querySelector('source[type="image/avif"]')).not.toBeNull();
       expect(picture?.querySelector('source[type="image/webp"]')).not.toBeNull();
