@@ -15,17 +15,38 @@ description = "Chat signing key assignment"
 regex = '''CHAT_SIGNING_KEY\s*=\s*["'][^"']{8,}["']'''
 tags = ["secret", "thechrisgrey"]
 
+[[rules.allowlists]]
+description = "Read the signing key from Secrets Manager at runtime"
+condition = "AND"
+paths = ['''scripts/deploy-personal-account\.sh$''']
+regexTarget = "match"
+regexes = ['''^CHAT_SIGNING_KEY="\$\(runtime_secret_field CHAT_SIGNING_KEY\)"$''']
+
 [[rules]]
 id = "blueprint-signing-key"
 description = "Blueprint signing key assignment"
 regex = '''BLUEPRINT_SIGNING_KEY\s*=\s*["'][^"']{8,}["']'''
 tags = ["secret", "thechrisgrey"]
 
+[[rules.allowlists]]
+description = "Read the signing key from Secrets Manager at runtime"
+condition = "AND"
+paths = ['''scripts/deploy-personal-account\.sh$''']
+regexTarget = "match"
+regexes = ['''^BLUEPRINT_SIGNING_KEY="\$\(runtime_secret_field BLUEPRINT_SIGNING_KEY\)"$''']
+
 [[rules]]
 id = "session-token-key"
 description = "Session token signing key assignment"
 regex = '''SESSION_TOKEN_KEY\s*=\s*["'][^"']{8,}["']'''
 tags = ["secret", "thechrisgrey"]
+
+[[rules.allowlists]]
+description = "Read the signing key from Secrets Manager at runtime"
+condition = "AND"
+paths = ['''scripts/deploy-personal-account\.sh$''']
+regexTarget = "match"
+regexes = ['''^SESSION_TOKEN_KEY="\$\(runtime_secret_field SESSION_TOKEN_KEY\)"$''']
 
 [[rules]]
 id = "turnstile-secret"
@@ -61,10 +82,6 @@ paths = [
 # nothing — an allowlist entry that looks effective but is not.
 regexTarget = "line"
 regexes = [
-  # Runtime lookups contain shell expressions, not literal signing keys.
-  '''^if ! SESSION_TOKEN_KEY="\$\(runtime_secret_field SESSION_TOKEN_KEY\)" \\$''',
-  '''^  \|\| ! CHAT_SIGNING_KEY="\$\(runtime_secret_field CHAT_SIGNING_KEY\)" \\$''',
-  '''^  \|\| ! BLUEPRINT_SIGNING_KEY="\$\(runtime_secret_field BLUEPRINT_SIGNING_KEY\)"; then$''',
   '''VITE_CHAT_SIGNING_KEY.*ci-placeholder-key''',
   '''VITE_CHAT_SIGNING_KEY.*placeholder''',
   # .env.example intentionally contains placeholder values for documentation
