@@ -61,6 +61,10 @@ paths = [
 # nothing — an allowlist entry that looks effective but is not.
 regexTarget = "line"
 regexes = [
+  # Runtime lookups contain shell expressions, not literal signing keys.
+  '''^if ! SESSION_TOKEN_KEY="\$\(runtime_secret_field SESSION_TOKEN_KEY\)" \\$''',
+  '''^  \|\| ! CHAT_SIGNING_KEY="\$\(runtime_secret_field CHAT_SIGNING_KEY\)" \\$''',
+  '''^  \|\| ! BLUEPRINT_SIGNING_KEY="\$\(runtime_secret_field BLUEPRINT_SIGNING_KEY\)"; then$''',
   '''VITE_CHAT_SIGNING_KEY.*ci-placeholder-key''',
   '''VITE_CHAT_SIGNING_KEY.*placeholder''',
   # .env.example intentionally contains placeholder values for documentation
