@@ -111,12 +111,9 @@ const ToolDraftCard = memo(function ToolDraftCard({ action, onDismiss, onAccept 
       general: 'General inquiry',
     };
     const openContact = () => {
-      const params = new URLSearchParams({
-        subject: action.subject,
-        message: action.body,
-        intent: action.intent,
+      navigate('/contact', {
+        state: { draft: { subject: action.subject, message: action.body, intent: action.intent } },
       });
-      navigate(`/contact?${params.toString()}`);
       accepted();
     };
     return (

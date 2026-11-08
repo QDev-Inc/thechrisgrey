@@ -93,7 +93,7 @@ test("checkRateLimit never uses Query/Scan/Get (single-key access, no read of pr
   assert.ok(!types.includes("BatchGetCommand"), "rate check must not batch-get prior requests");
 });
 
-test("checkRateLimit DynamoDB error fails open with no retry loop (bounded calls)", async () => {
+test("checkRateLimit DynamoDB error fails closed with no retry loop (bounded calls)", async () => {
   // A non-conditional error should fail open (allowed) without retrying N times.
   const client = countingClient([new Error("throttled")]);
   const result = await checkRateLimit(client, UpdateCommand, {
@@ -103,6 +103,6 @@ test("checkRateLimit DynamoDB error fails open with no retry loop (bounded calls
     windowSeconds: 3600,
     requestId: "req-1",
   });
-  assert.equal(result.allowed, true, "DynamoDB error fails open");
+  assert.equal(result.allowed, false, "DynamoDB error fails closed");
   assert.equal(client.calls.length, 1, "error path must not retry in a loop");
 });

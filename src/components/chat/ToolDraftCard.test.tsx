@@ -82,15 +82,13 @@ describe('ToolDraftCard — contact', () => {
     expect(screen.getByText(/Long body text/)).toBeInTheDocument();
   });
 
-  it('navigates to contact with query params on accept', () => {
+  it('navigates to contact without private draft content in the URL', () => {
     let current = '/';
     renderWithRouter(<ToolDraftCard action={baseAction} />, (loc) => {
       current = loc;
     });
     fireEvent.click(screen.getByRole('button', { name: /Review & send/i }));
-    expect(current).toContain('/contact');
-    expect(current).toContain('subject=Podcast');
-    expect(current).toContain('intent=podcast');
+    expect(current).toBe('/contact');
   });
 });
 

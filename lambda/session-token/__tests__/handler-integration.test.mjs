@@ -32,7 +32,7 @@ import { verifySessionToken } from "lambda-shared/sessionToken";
 // ── Env setup BEFORE importing the handler ──────────────────────────────────
 process.env.SESSION_TOKEN_KEY = "integration-test-signing-secret";
 process.env.TURNSTILE_SECRET = "test-turnstile-secret";
-process.env.CORS_ORIGIN = "https://thechrisgrey.com";
+process.env.CORS_ORIGIN = "https://thechrisgrey.com, https://main.example.amplifyapp.com";
 process.env.SESSION_RATE_LIMIT_TABLE = "thechrisgrey-chat-ratelimit";
 process.env.SESSION_CHAT_TTL = "1800";
 process.env.SESSION_BLUEPRINT_TTL = "600";
@@ -70,7 +70,8 @@ let turnstileSuccess = true;
 
 globalThis.fetch = async function fakeFetch() {
   return {
-    json: async () => ({ success: turnstileSuccess }),
+    ok: true,
+    json: async () => ({ success: turnstileSuccess, hostname: "thechrisgrey.com", action: "session" }),
   };
 };
 
@@ -223,4 +224,16 @@ test("happy path mints scoped chat + blueprint tokens bound to device hash", asy
     verifySessionToken(body.chatToken, "integration-test-signing-secret", { scope: "blueprint" }).valid,
     false,
   );
+});
+
+for (const origin of ["https://thechrisgrey.com", "https://main.example.amplifyapp.com"]) {
+  test(`configured origin ${origin} reaches validation`, async () => {
+    const response = await handler(makeEvent({ origin, body: {} }));
+    assert.equal(response.statusCode, 400);
+    assert.equal(parseBody(response).error, "invalid_device_id");
+  });
+}
+
+test("null JSON body is a client error", async () => {
+  assert.equal((await handler(makeEvent({ body: "null" }))).statusCode, 400);
 });

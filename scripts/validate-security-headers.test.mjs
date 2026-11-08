@@ -145,8 +145,6 @@ describe('security headers (customHttp.yml)', () => {
       it('script-src allows the analytics, Turnstile, and PostHog origins', () => {
         const scriptSrc = header('Content-Security-Policy').match(/script-src ([^;]*)/)?.[1];
         for (const origin of [
-          'https://static.cloudflareinsights.com', // Cloudflare beacon
-          'https://plausible.io', // Plausible analytics
           'https://challenges.cloudflare.com', // Cloudflare Turnstile
           'https://us-assets.i.posthog.com', // PostHog asset host
         ]) {
@@ -161,6 +159,7 @@ describe('security headers (customHttp.yml)', () => {
           'https://challenges.cloudflare.com', // Turnstile challenge
           'https://cognito-idp.us-east-1.amazonaws.com', // /admin auth
           'https://dataplane.rum.us-east-1.amazonaws.com', // CloudWatch RUM
+          'https://f53pzh3xzfp6erric42mv77yae0ztpnf.lambda-url.us-east-1.on.aws', // MCP session client
         ]) {
           expect(connectSrc, `connect-src must allow ${origin}`).toContain(origin);
         }

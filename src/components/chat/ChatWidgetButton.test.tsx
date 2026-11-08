@@ -172,19 +172,17 @@ describe('ChatWidgetButton', () => {
       expect(await screen.findByTestId('alti-mascot')).toBeInTheDocument();
     });
 
-    it('mounts the 3D mascot unprompted once the deferral timer elapses', async () => {
-      // jsdom has no requestIdleCallback, which is exactly the Safari path: the
-      // setTimeout fallback must still get the mascot on screen on its own.
+    it('does not download the 3D mascot without visitor intent', async () => {
       expect(typeof window.requestIdleCallback).toBe('undefined');
       vi.useFakeTimers();
       render(<ChatWidgetButton isOpen={false} onClick={vi.fn()} />);
       expect(screen.queryByTestId('alti-mascot')).not.toBeInTheDocument();
 
       await act(async () => {
-        vi.advanceTimersByTime(3000);
+        vi.advanceTimersByTime(30000);
       });
 
-      expect(screen.getByTestId('alti-mascot')).toBeInTheDocument();
+      expect(screen.queryByTestId('alti-mascot')).not.toBeInTheDocument();
     });
   });
 

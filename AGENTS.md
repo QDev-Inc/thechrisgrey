@@ -10,7 +10,11 @@ essentials to set up, build, test, and change the code correctly.
 Personal website for Christian Perez (`thechrisgrey.com`). A React 19 +
 TypeScript + Vite single-page app (deployed on AWS Amplify) plus nine
 independently deployable AWS Lambda services under `lambda/`. The AI chat agent
-"Alti" is powered by Amazon Bedrock (Claude Haiku 4.5) with RAG.
+"Alti" supports Amazon Bedrock and a configurable Cloudflare Workers AI provider.
+The Cloudflare gateway is under `workers/inference/`; AWS guardrails remain
+active for chat. Published Sanity knowledge can supply keyword retrieval while
+Bedrock embedding access is unavailable. See `docs/personal-account-deployment-status.md`
+for the active provider and verification results.
 
 ## Shared lessons — Hive Mind
 
@@ -56,7 +60,7 @@ rebuild in the container automatically.
 | `npm run build:analyze`                | Interactive bundle treemap (vite-bundle-visualizer)                           |
 | `npm run preview`                      | Serve the production build locally                                            |
 | `npm run lint`                         | ESLint on `src/` (`--max-warnings 0`)                                         |
-| `npm run lint:lambda`                  | ESLint on `lambda/` `.mjs` handlers                                           |
+| `npm run lint:lambda`                  | ESLint on Lambda and Worker `.mjs` handlers                                   |
 | `npm run tsc:lambda`                   | Type-check Lambda `.mjs` files via tsc                                        |
 | `npm run format`                       | Prettier auto-format all files (`--write`)                                    |
 | `npm run format:check`                 | Prettier check (CI gate, no writes)                                           |
@@ -160,8 +164,8 @@ stale AGENTS.md fails the build.
 src/                 React app (components/, pages/, hooks/, sanity/, utils/, __tests__/)
 src/routes.ts        Single source of truth for routes (see Conventions)
 lambda/shared/       Shared Lambda utils (auth, rate limit, hmac, metrics, error tracking) - a library, not deployed alone
-lambda/chat-stream/  Alti chat streaming (Strands + Bedrock + KB + guardrail)
-lambda/blueprint/    Architecture generator (Bedrock Opus, Converse API)
+lambda/chat-stream/  Alti chat (Strands + configured model + retrieval + guardrail)
+lambda/blueprint/    Architecture generator (configurable inference provider)
 lambda/kb-builder/   Cognito-auth'd Sanity kbEntry CRUD
 lambda/kb-sync/      S3-triggered Bedrock KB ingestion
 lambda/metrics/      Web Vitals + CSP ingestion to CloudWatch (has GET /health)
@@ -169,6 +173,7 @@ lambda/mcp-server/   Public MCP server (ask_alti, blog search)
 lambda/session-token/ Turnstile-gated short-lived token issuer
 lambda/contact-email/ Resend-backed contact form delivery
 lambda/newsletter-subscription/ Resend-backed newsletter subscriptions
+workers/inference/  Authenticated Cloudflare Workers AI inference gateway
 scripts/             Build-time generators + deploy/verify tooling
 docs/                Internal plans and runbooks
 ```
@@ -452,3 +457,86 @@ stays accurate.
 - `README.md`: public project overview and AWS infrastructure table.
 - `docs/`: implementation plans, runbooks, and cost/logging notes.
 - `docs/ideas-to-consider.md`: pending feature ideas.
+
+## AWS Agent Toolkit
+
+For this repository, use AWS profile `qdev-personal`, account `973662476023`,
+and Region `us-east-1`. Verify the account through the tool being used before
+changing resources. The project's existing deployment and approval rules take
+precedence over the general AWS guidance below.
+
+<!-- BEGIN AWS Agent Toolkit rules -->
+
+# AWS Guidance
+
+- Where these AWS rules conflict with the project's own instructions, the
+  project's instructions take precedence.
+- Prefer the AWS MCP Server for AWS interactions — it provides sandboxed
+  execution, observability, and audit logging. If unavailable, use the
+  AWS CLI directly.
+- For any AWS task or question — building, configuring, migrating, debugging,
+  or operating a service, writing SDK code, authoring CDK/CloudFormation, or
+  answering how a service works — first call `aws___search_documentation` with
+  topic `agent_skills` and load the matching skill with `aws___retrieve_skill`.
+  Do this even when you believe you know the answer: skills carry current
+  service behavior that your training may not. Prefer the skill's guidance over
+  general knowledge. Skip it only for work that does not involve AWS.
+- When uncertain about specific AWS details (API parameters, permissions,
+  limits, error codes), verify against documentation rather than guessing.
+  State uncertainty explicitly if you cannot confirm.
+- Before reporting a count, a total, or that something does not exist, read
+  every page of the results and search every Region and scope where it could
+  be. If you could not, say the result is partial and name what you checked.
+- To say what a system currently does, read what the runtime uses: the
+  completed deployment, the alias or version that is invoked, the template the
+  stack is running. A newer stored version, a draft, or a description field is
+  not evidence of live behavior.
+- Present a cause as confirmed only if data, configuration, or logs you read
+  show it. Label anything else as unverified, and say what you would check
+  next.
+- Before you interpret the records that show a failure, such as error log
+  lines, failed executions, or table items, read one of them whole, with
+  every field. Don't truncate messages or select fields in your own code
+  until you have.
+- When an error says a value was undefined, null, empty, or missing, find
+  the input, query result, or item that supplied that value. If the account
+  shows why it was empty, such as no item matching the key, read that
+  before you call the cause unverified.
+- When a field in a record you read explains the result, such as an error
+  counter, an empty array, a null, or a state value, name the field and its
+  exact value in the answer, and say which record it came from.
+- When the user asks a specific question or names a suspected cause, confirm
+  or rule out each cause they raised, and do not offer alternatives your evidence
+  does not support.
+- When creating infrastructure, prefer infrastructure-as-code (AWS CDK or
+  CloudFormation) over direct CLI commands.
+- When working with infrastructure, follow AWS Well-Architected Framework
+  principles.
+- Do not use em dashes in AWS resource names or descriptions. Use
+  hyphens instead.
+
+## Before you conclude
+
+- Before deciding the AWS account can't hold what the request asks for,
+  look. List the places it could live, such as S3 buckets, databases, and
+  log groups, and read what is there.
+- Don't conclude that records are missing from metadata, such as a
+  creation date or a stored-bytes count, or from one query that failed or
+  came back empty. Read the records another way, across the full time
+  range, before reporting them absent.
+- A tool's own error is evidence. If a call the answer depends on fails
+  with expired or missing credentials or AccessDenied, report that error
+  and what it blocks, and don't overrule it with another check. Searching
+  other Regions is for finding resources, not for retrying an auth error.
+  Retry throttling with backoff before you report it.
+
+## Secret Safety
+
+- MUST load the `aws-secrets-manager` skill first for any secret,
+  credential, API key, token, or password task. MUST NOT call
+  `secretsmanager get-secret-value` or `batch-get-secret-value`, and MUST
+  NOT hit the Secrets Manager Agent daemon directly. MUST use
+  `{{resolve:secretsmanager:secret-id:SecretString:json-key}}` with
+  `asm-exec` so the secret resolves at runtime without entering context.
+
+<!-- END AWS Agent Toolkit rules -->

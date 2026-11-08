@@ -93,7 +93,7 @@ const ChatWidgetPanel = ({ onClose }: ChatWidgetPanelProps) => {
         role="dialog"
         aria-modal="true"
         aria-label="Alti - Altivum's AI Agent"
-        className="fixed bottom-24 right-6 z-40 w-[calc(100vw-2rem)] h-[calc(100vh-8rem)] sm:w-[400px] sm:h-[560px] bg-altivum-navy border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-widget-open"
+        className="fixed bottom-[calc(6rem+var(--consent-bottom,0px))] right-4 sm:right-6 z-40 w-[calc(100vw-2rem)] h-[calc(100dvh-11rem-var(--consent-bottom,0px))] sm:w-[400px] sm:h-[560px] bg-altivum-navy border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-widget-open"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-altivum-dark/60 backdrop-blur-xs shrink-0">

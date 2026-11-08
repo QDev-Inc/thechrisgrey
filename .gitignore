@@ -90,6 +90,10 @@ vite.config.js
 # Local Claude Code tooling scratch (screenshots, workflow scripts, local settings)
 .claude/
 
+# Local design-tool state and terminal session captures
+.impeccable/
+/typescript
+
 # Raw source images — input for the not-yet-run editorial redesign (kept on disk, not versioned)
 scripts/editorial-raw/
 

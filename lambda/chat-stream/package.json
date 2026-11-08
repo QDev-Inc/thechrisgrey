@@ -15,7 +15,7 @@
     "@sentry/node": "^10.0.0",
     "posthog-node": "^5.39.4",
     "lambda-shared": "file:../shared",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "scripts": {
     "test": "node --test __tests__/*.test.mjs __tests__/tools/*.test.mjs"

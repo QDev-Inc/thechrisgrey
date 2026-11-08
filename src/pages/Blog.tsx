@@ -481,7 +481,7 @@ const Blog = () => {
       </div>
 
       {/* Hero Section */}
-      <section className="py-32 bg-altivum-dark">
+      <section className="py-12 md:py-16 bg-altivum-dark">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="max-w-4xl">
             <div className="inline-block px-4 py-2 bg-altivum-gold/10 rounded-md mb-6">

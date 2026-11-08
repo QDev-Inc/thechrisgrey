@@ -16,6 +16,7 @@ interface TurnstileApi {
     container: HTMLElement,
     opts: {
       sitekey: string;
+      action?: string;
       // Turnstile has no "invisible" size (that's reCAPTCHA). Invisibility is
       // controlled by `appearance` ('interaction-only' = hidden unless a challenge
       // needs interaction); `execution: 'execute'` defers the challenge to execute().
@@ -98,7 +99,7 @@ async function waitForApi(timeoutMs = 5000): Promise<TurnstileApi> {
  * Resolve with a fresh, single-use Turnstile token. Returns "" if Turnstile is
  * not configured (no site key) so local/dev works without it.
  */
-export async function getTurnstileToken(): Promise<string> {
+export async function getTurnstileToken(action: 'session' | 'contact' | 'newsletter' = 'session'): Promise<string> {
   if (!SITE_KEY) return '';
   await loadScript();
   const api = await waitForApi();
@@ -142,6 +143,7 @@ export async function getTurnstileToken(): Promise<string> {
     // The callbacks fire after render() returns, so they safely read ctl.widgetId.
     ctl.widgetId = api.render(container, {
       sitekey: SITE_KEY,
+      action,
       appearance: 'interaction-only',
       execution: 'execute',
       callback: (token: string) => succeed(token),

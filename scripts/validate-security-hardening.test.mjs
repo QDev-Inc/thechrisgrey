@@ -159,32 +159,6 @@ describe('VAL-SEC-011 — SRI on stable third-party scripts and no public source
   describe('index.html SRI attributes', () => {
     const indexHtml = readFileSync(join(repoRoot, 'index.html'), 'utf8');
 
-    it('Plausible analytics script has integrity and crossorigin', () => {
-      // Plausible serves a hash-derived, stable filename with a known SRI hash.
-      const plausibleMatch = indexHtml.match(/<script[^>]*src="https:\/\/plausible\.io\/[^"]*"[^>]*>/);
-      expect(plausibleMatch, 'Plausible analytics script tag must exist').toBeDefined();
-      const tag = plausibleMatch[0];
-      expect(tag).toMatch(/integrity=/);
-      expect(tag).toMatch(/crossorigin=/);
-    });
-
-    it('Cloudflare beacon is documented as having no stable hash (SRI exception)', () => {
-      // Cloudflare's beacon.min.js is served from an unversioned URL that
-      // rotates globally, so there is no stable hash to pin. It is mitigated
-      // by the CSP script-src allowlist. The comment must document this.
-      const cfMatch = indexHtml.match(
-        /<script[^>]*src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js"[^>]*>/,
-      );
-      expect(cfMatch, 'Cloudflare beacon script tag must exist').toBeDefined();
-      // The Cloudflare script must NOT have an integrity attribute (it would
-      // break on every Cloudflare update). The CSP allowlist is the mitigating
-      // control, documented in a comment near the script.
-      const cfTag = cfMatch[0];
-      expect(cfTag).not.toMatch(/integrity=/);
-      // A comment near the script must mention the lack of stable hash.
-      expect(indexHtml).toMatch(/no stable hash|no stable.*SRI|Cloudflare.*updates globally/i);
-    });
-
     it('all third-party CDN scripts have crossorigin or a documented exception', () => {
       // Find all <script> tags with external src (not local / paths)
       const externalScripts = [...indexHtml.matchAll(/<script[^>]*src="(https?:\/\/[^"]*)"[^>]*>/g)];
@@ -193,8 +167,6 @@ describe('VAL-SEC-011 — SRI on stable third-party scripts and no public source
         const src = match[1];
         // plausible-init.js is local (not http) — skip local scripts
         if (!src.startsWith('http')) continue;
-        // Cloudflare is the documented exception (no stable hash)
-        if (src.includes('cloudflareinsights.com')) continue;
         // All other external scripts must have integrity + crossorigin
         expect(tag, `External script ${src} must have integrity`).toMatch(/integrity=/);
         expect(tag, `External script ${src} must have crossorigin`).toMatch(/crossorigin=/);

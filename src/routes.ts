@@ -270,6 +270,13 @@ export const ROUTES: readonly RouteDefinition[] = [
     context: { pageTitle: 'Privacy Policy', section: 'Privacy Policy' },
   },
   {
+    path: '/newsletter/confirm',
+    importer: () => import('./pages/NewsletterConfirm'),
+    context: { pageTitle: 'Confirm subscription', section: 'Subscription' },
+    noPrefetch: true,
+    noIndex: true,
+  },
+  {
     path: '/admin',
     importer: () => import('./pages/Admin'),
     context: { pageTitle: 'Admin', section: 'Admin' },

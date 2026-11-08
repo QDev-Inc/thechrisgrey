@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 /**
  * Responsive <picture> component for raster images imported via the
  * `?responsive` Vite plugin (vite-plugins/responsive-images.ts).
@@ -36,16 +38,19 @@ const buildSrcSet = (variants: { src: string; width: number }[]) =>
   variants.map((v) => `${v.src} ${v.width}w`).join(', ');
 
 const ResponsiveImage = ({ src, alt, sizes, className, style, priority = false, loading }: ResponsiveImageProps) => {
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const useFallback = failedSource === src.fallback.src;
   const isDecorative = !alt.trim();
   const imgLoading = loading ?? (priority ? 'eager' : 'lazy');
   const imgDecoding = priority ? 'sync' : 'async';
 
   return (
     <picture>
-      {src.avif.length > 0 && <source type="image/avif" srcSet={buildSrcSet(src.avif)} sizes={sizes} />}
-      {src.webp.length > 0 && <source type="image/webp" srcSet={buildSrcSet(src.webp)} sizes={sizes} />}
+      {!useFallback && src.avif.length > 0 && <source type="image/avif" srcSet={buildSrcSet(src.avif)} sizes={sizes} />}
+      {!useFallback && src.webp.length > 0 && <source type="image/webp" srcSet={buildSrcSet(src.webp)} sizes={sizes} />}
       <img
         src={src.fallback.src}
+        onError={() => setFailedSource(src.fallback.src)}
         width={src.fallback.width}
         height={src.fallback.height}
         alt={alt}

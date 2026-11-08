@@ -140,7 +140,7 @@ export default [
 
   // Lambda: ESM .mjs handlers with the awslambda runtime global.
   {
-    files: ['lambda/**/*.mjs'],
+    files: ['lambda/**/*.mjs', 'workers/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

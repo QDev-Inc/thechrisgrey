@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HeroBento from './HeroBento';
 
@@ -25,6 +25,16 @@ const renderHero = () =>
   );
 
 describe('HeroBento', () => {
+  it('restores the original PNG if a responsive portrait cannot load', () => {
+    renderHero();
+    const portrait = screen.getByRole('img', { name: 'Christian Perez' });
+    fireEvent.error(portrait);
+    expect(portrait).not.toHaveAttribute('srcset');
+    expect(portrait).toHaveAttribute('src', '/press-kit/headshots/Professional%20Headshot.png');
+    fireEvent.error(portrait);
+    expect(portrait).toHaveAttribute('src', '/press-kit/headshots/Professional%20Headshot.png');
+  });
+
   it('presents a complete accessible introduction without relying on a video or canvas', () => {
     const { container } = renderHero();
 
@@ -34,7 +44,7 @@ describe('HeroBento', () => {
     expect(screen.getByRole('link', { name: /start a conversation/i })).toHaveAttribute('href', '/contact');
     expect(screen.getByRole('img', { name: 'Christian Perez' })).toHaveAttribute(
       'src',
-      '/press-kit/headshots/Professional%20Headshot.png',
+      expect.stringContaining('hero-portrait-960.jpg'),
     );
     expect(container.querySelector('video, canvas')).toBeNull();
   });

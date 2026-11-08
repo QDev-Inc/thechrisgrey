@@ -3,8 +3,8 @@ info:
   title: Alti Chat Stream API
   version: '1.0.0'
   description: |
-    Streaming chat endpoint powering Alti, the site's AI agent (Bedrock Claude
-    Haiku 4.5 + Strands SDK + Knowledge Base RAG). Deployed as an AWS Lambda
+    Chat endpoint powering Alti through Strands with configurable Bedrock or
+    Cloudflare inference, AWS guardrails, and knowledge retrieval. Deployed as an AWS Lambda
     Function URL invoked with `awslambda.streamifyResponse`.
 
     Authentication accepts a server-issued session token

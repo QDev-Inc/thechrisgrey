@@ -21,6 +21,8 @@
     "./deviceId": "./deviceId.mjs",
     "./pii": "./pii.mjs",
     "./bedrockRetrieve": "./bedrockRetrieve.mjs",
+    "./inference": "./inference.mjs",
+    "./knowledge": "./knowledge.mjs",
     "./dynamoDbSchemas": "./dynamoDbSchemas.mjs",
     "./turnstile": "./turnstile.mjs",
     "./secrets": "./secrets.mjs"
@@ -28,6 +30,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.1068.0",
     "@sentry/node": "^10.0.0",
+    "aws-jwt-verify": "^5.2.1",
     "posthog-node": "^5.39.4"
   },
   "scripts": {

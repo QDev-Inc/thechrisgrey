@@ -47,6 +47,7 @@ globalThis.awslambda = {
 
 const { handler } = await import("../index.mjs");
 const { issueSessionToken } = await import("lambda-shared/sessionToken");
+const { hashDeviceId } = await import("lambda-shared/deviceId");
 
 function makeEvent({ headers = {}, body = "{}", method = "POST" } = {}) {
   return {
@@ -90,6 +91,32 @@ test("a chat-scoped token is rejected on the blueprint endpoint (401)", async ()
   assert.equal(status, 401);
 });
 
+test("a valid token cannot select another device's quota", async () => {
+  const token = issueSessionToken(
+    { deviceHash: hashDeviceId("device-aaaaaaaaaaaa"), scope: "blueprint" },
+    SESSION_KEY,
+    300,
+  );
+  const result = await run(
+    makeEvent({
+      headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify({ spec: {}, deviceId: "device-bbbbbbbbbbbb" }),
+    }),
+  );
+  assert.equal(result.status, 401);
+  assert.match(result.body, /device_mismatch/);
+});
+
+test("invalid specs are rejected before a device allowance is reserved", async () => {
+  const deviceId = "device-aaaaaaaaaaaa";
+  const token = issueSessionToken({ deviceHash: hashDeviceId(deviceId), scope: "blueprint" }, SESSION_KEY, 300);
+  const result = await run(
+    makeEvent({ headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ spec: {}, deviceId }) }),
+  );
+  assert.equal(result.status, 400);
+  assert.match(result.body, /invalid_input/);
+});
+
 test("a valid legacy x-blueprint-* signature is REJECTED once session tokens are rolled out", async () => {
   // With SESSION_TOKEN_KEY configured and ALLOW_LEGACY_HMAC unset, legacy HMAC
   // alone (no bearer) is no longer accepted — tokens are required.
@@ -109,3 +136,10 @@ test("ALLOW_LEGACY_HMAC=1 re-enables the legacy transition window", async () => 
     delete process.env.ALLOW_LEGACY_HMAC;
   }
 });
+
+for (const body of ["null", "[]", "42"]) {
+  test(`rejects non-object JSON ${body} before quota reservation`, async () => {
+    const token = issueSessionToken({ deviceHash: "d".repeat(64), scope: "blueprint" }, SESSION_KEY, 300);
+    assert.equal((await run(makeEvent({ headers: { authorization: `Bearer ${token}` }, body }))).status, 400);
+  });
+}

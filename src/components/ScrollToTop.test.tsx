@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import ScrollToTop from './ScrollToTop';
 
 describe('ScrollToTop', () => {
@@ -64,4 +64,30 @@ describe('ScrollToTop', () => {
 
     expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'instant' }));
   });
+});
+
+function HistoryControls() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <ScrollToTop />
+      <button onClick={() => navigate('/about')}>Next</button>
+      <button onClick={() => navigate(-1)}>Back</button>
+    </>
+  );
+}
+
+it('restores a previous page position when navigating back', () => {
+  const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  render(
+    <MemoryRouter initialEntries={['/blog']}>
+      <HistoryControls />
+    </MemoryRouter>,
+  );
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 700 });
+  fireEvent.scroll(window);
+  fireEvent.click(screen.getByText('Next'));
+  fireEvent.click(screen.getByText('Back'));
+  expect(scroll).toHaveBeenLastCalledWith({ top: 700, left: 0, behavior: 'instant' });
+  Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
 });

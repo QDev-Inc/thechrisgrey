@@ -28,6 +28,7 @@ import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { getFoundationOutputs, pinAwsAccount } from './lib/aws-preflight.mjs';
+import { PODCAST_CONTENT_PREFIX } from './lib/podcast-corpus.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -224,7 +225,7 @@ async function main() {
   execFileSync('node', [join(ROOT, 'scripts/ingest-podcast-transcripts.mjs')], { stdio: 'inherit' });
   const staging = join(ROOT, 'podcast-kb-staging');
   console.log('=== Syncing to S3 ===');
-  aws(['s3', 'sync', staging, `s3://${SRC_BUCKET}/`, '--delete']);
+  aws(['s3', 'sync', staging, `s3://${SRC_BUCKET}/${PODCAST_CONTENT_PREFIX}`]);
   console.log('=== Starting ingestion job ===');
   const job = JSON.parse(
     aws(['bedrock-agent', 'start-ingestion-job', '--knowledge-base-id', KB_ID, '--data-source-id', DS_ID]),

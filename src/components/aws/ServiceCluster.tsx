@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
+import { configureTextBuilder } from 'troika-three-text';
 import * as THREE from 'three';
 import type { ClusterData } from '../../data/infrastructureTopology';
 
@@ -21,6 +22,9 @@ import type { ClusterData } from '../../data/infrastructureTopology';
  * up against the dark background. SIL OFL 1.1 — see manrope-LICENSE.txt.
  */
 const LABEL_FONT = '/fonts/manrope-latin-300.woff';
+
+// Troika's worker dynamically imports generated scripts, which the site's CSP blocks.
+configureTextBuilder({ useWorker: false });
 
 interface ServiceClusterProps {
   cluster: ClusterData;

@@ -36,18 +36,20 @@ function SiteHealthPanel({ expanded, onToggle, data, isLoading }: SiteHealthPane
             </p>
           ) : (
             <div className="space-y-4">
-              {/* Web Vitals */}
+              {/* Web Vitals (75th percentile) */}
               <div>
-                <h4 className="text-xs font-medium text-altivum-gold uppercase tracking-wider mb-2">Core Web Vitals</h4>
+                <h4 className="text-xs font-medium text-altivum-gold uppercase tracking-wider mb-2">
+                  Core Web Vitals (75th percentile)
+                </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   {(['lcp', 'cls', 'inp', 'fcp', 'ttfb'] as const).map((key) => {
                     const vital = data.vitals[key];
                     const label = key.toUpperCase();
                     const value =
-                      vital.average !== null
+                      vital.p75 != null
                         ? key === 'cls'
-                          ? vital.average.toFixed(3)
-                          : `${Math.round(vital.average)}ms`
+                          ? vital.p75!.toFixed(3)
+                          : `${Math.round(vital.p75!)}ms`
                         : '--';
                     return (
                       <div key={key} className="p-3 bg-white/5 rounded-sm">

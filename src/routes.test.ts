@@ -167,6 +167,7 @@ describe('sitemap/prerender ↔ ROUTES drift detector', () => {
  */
 const NON_NAV_ROUTES = new Set([
   '/blog/:slug', // dynamic — reached from blog cards, never a top-level nav item
+  '/newsletter/confirm', // reached through the mailbox confirmation link
   '/privacy', // footer-only legal page
   '/admin', // Cognito-gated, hidden surface
 ]);

@@ -19,6 +19,7 @@
     "useUnknownInCatchVariables": true
   },
   "include": [
+    "../workers/**/*.mjs",
     "shared/**/*.mjs",
     "chat-stream/**/*.mjs",
     "blueprint/**/*.mjs",

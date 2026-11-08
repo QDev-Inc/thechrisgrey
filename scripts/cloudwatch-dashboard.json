@@ -188,13 +188,13 @@
         "view": "timeSeries",
         "stacked": false,
         "metrics": [
-          ["TheChrisGrey/SiteMetrics", "LCP", "Source", "frontend"],
-          ["TheChrisGrey/SiteMetrics", "CLS", "Source", "frontend"],
-          ["TheChrisGrey/SiteMetrics", "INP", "Source", "frontend"]
+          ["TheChrisGrey/SiteMetrics", "LCP"],
+          ["TheChrisGrey/SiteMetrics", "CLS"],
+          ["TheChrisGrey/SiteMetrics", "INP"]
         ],
-        "title": "Frontend Web Vitals (LCP, CLS, INP)",
+        "title": "Frontend Web Vitals (p75)",
         "period": 300,
-        "stat": "Average"
+        "stat": "p75"
       }
     },
     {

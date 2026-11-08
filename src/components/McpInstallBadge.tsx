@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { typography } from '../utils/typography';
 import Icon from './icons/Icon';
+import { getSessionToken } from '../utils/sessionToken';
 
-const MCP_ENDPOINT = 'https://mcp.thechrisgrey.com';
+const MCP_ENDPOINT = import.meta.env.VITE_MCP_ENDPOINT || 'https://mcp.thechrisgrey.com';
 
-const CLAUDE_DESKTOP_SNIPPET = `{
+const makeConfig = (token: string) => `{
   "mcpServers": {
     "alti": {
       "command": "npx",
-      "args": ["mcp-remote", "${MCP_ENDPOINT}"]
+      "args": ["mcp-remote", "${MCP_ENDPOINT}", "--header", "Authorization:Bearer ${token}"]
     }
   }
 }`;
@@ -66,6 +67,21 @@ function CopyButton({ value, label }: CopyButtonProps) {
 }
 
 export function McpInstallBadge() {
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const generateConfig = async () => {
+    setBusy(true);
+    setError('');
+    const issued = await getSessionToken('mcp');
+    setBusy(false);
+    if (!issued) {
+      setError('Verification failed. Please try again.');
+      return;
+    }
+    setToken(issued);
+  };
+  const config = makeConfig(token || 'GENERATE_A_SESSION_BELOW');
   return (
     <section className="py-20 md:py-28" aria-labelledby="mcp-install-heading">
       <div className="max-w-4xl mx-auto px-6 lg:px-8">
@@ -75,8 +91,8 @@ export function McpInstallBadge() {
             Use Alti in Your AI Client
           </h2>
           <p className="text-altivum-silver max-w-2xl mx-auto" style={typography.bodyText}>
-            Alti is also available as a public MCP server. Add the endpoint to Claude Desktop, Claude Cowork, Cursor, or
-            any MCP-capable client to search Christian&apos;s blog and talk to Alti without visiting the site.
+            Connect Alti to a client that supports MCP bearer headers. Verify your session below, then copy the
+            configuration to search the blog and ask about Christian’s work.
           </p>
         </div>
 
@@ -101,22 +117,38 @@ export function McpInstallBadge() {
               <p className="text-altivum-silver/70 text-xs uppercase tracking-[0.2em]" style={typography.smallText}>
                 Claude Desktop config
               </p>
-              <CopyButton value={CLAUDE_DESKTOP_SNIPPET} label="Copy config" />
+              {token ? (
+                <CopyButton value={config} label="Copy config" />
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void generateConfig()}
+                  className="min-h-11 rounded-lg border border-altivum-gold/50 px-4 py-2 text-altivum-gold disabled:opacity-50"
+                >
+                  {busy ? 'Verifying…' : 'Generate session config'}
+                </button>
+              )}
             </div>
             <pre
-              className="bg-altivum-dark/60 border border-white/5 rounded-lg p-4 overflow-x-auto text-xs sm:text-sm text-altivum-silver font-mono leading-relaxed"
+              className="ph-no-capture bg-altivum-dark/60 border border-white/5 rounded-lg p-4 overflow-x-auto text-xs sm:text-sm text-altivum-silver font-mono leading-relaxed"
               aria-label="Claude Desktop configuration snippet"
             >
-              <code>{CLAUDE_DESKTOP_SNIPPET}</code>
+              <code>{config}</code>
             </pre>
             <p className="text-altivum-silver/60 mt-3" style={typography.smallText}>
               Claude Desktop reaches the server through{' '}
-              <code className="text-altivum-gold/90 font-mono">mcp-remote</code>, a small stdio bridge. Alternatively,
-              open Settings &rarr; Connectors &rarr; Add custom connector and paste the URL above &mdash; no config file
-              needed.
+              <code className="text-altivum-gold/90 font-mono">mcp-remote</code>, a stdio bridge. The session expires
+              after 30 minutes. Return here to generate a new configuration when it expires. Treat the generated
+              configuration as a temporary credential. URL-only connectors are not supported.
             </p>
           </div>
 
+          {error && (
+            <p role="alert" className="text-red-300 mb-4">
+              {error}
+            </p>
+          )}
           <div>
             <p className="text-altivum-silver/70 text-xs uppercase tracking-[0.2em] mb-3" style={typography.smallText}>
               Exposed tools
@@ -134,7 +166,7 @@ export function McpInstallBadge() {
           </div>
 
           <p className="text-altivum-silver/50 mt-6 text-xs" style={typography.smallText}>
-            Public, unauthenticated, rate-limited to 60 requests per hour per IP.
+            Verified sessions, rate-limited to 60 requests per hour per IP.
           </p>
         </div>
       </div>

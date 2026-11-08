@@ -20,8 +20,8 @@ const breadcrumbs = [
 const HIGHLIGHT_ITEMS: Array<{ icon: string; title: string; body: string }> = [
   {
     icon: 'schema',
-    title: 'Opus-grade architecture',
-    body: 'Claude Opus 4.6 picks services, wires a Mermaid diagram, and justifies every choice.',
+    title: 'Architecture with clear tradeoffs',
+    body: 'Get service recommendations, a Mermaid diagram, and the reasoning behind each choice.',
   },
   {
     icon: 'terminal',
@@ -48,8 +48,8 @@ function BlueprintHero() {
         AWS architecture, <span className="text-altivum-gold">on demand.</span>
       </h1>
       <p className="text-altivum-silver max-w-2xl mx-auto" style={typography.subtitle}>
-        Describe what you want to build. Claude Opus 4.6 returns a tight architecture, diagram, IaC scaffold, cost
-        estimate, and ready-to-use Claude Code artifacts.
+        Describe what you want to build and get an architecture, diagram, IaC scaffold, cost estimate, and ready-to-use
+        Claude Code artifacts.
       </p>
     </section>
   );
@@ -86,7 +86,7 @@ function WaitlistPlaceholder() {
       <div className="pt-6">
         <Waitlist
           heading="Be first when Blueprint goes live."
-          subheading="Opus 4.6 generation is expensive, so we're launching to the waitlist first. Drop your email and we'll email you the moment it opens."
+          subheading="We're opening access gradually. Join the waitlist and we'll email you when it's ready."
         />
       </div>
       <p className="text-center text-altivum-silver/60" style={typography.smallText}>
@@ -125,7 +125,7 @@ export default function Blueprint() {
         <SEO
           title="Blueprint — Coming soon"
           description="thechrisgrey Blueprint turns a short spec into a production-ready AWS architecture, IaC, IAM guidance, cost estimate, and Claude Code artifacts. Join the waitlist."
-          keywords="AWS architecture generator, blueprint, Claude Opus, IaC, Claude Code skills, Christian Perez"
+          keywords="AWS architecture generator, blueprint, AI design, IaC, Claude Code skills, Christian Perez"
           url="https://thechrisgrey.com/blueprint"
           breadcrumbs={breadcrumbs}
           structuredData={structuredData}
@@ -148,8 +148,8 @@ export default function Blueprint() {
     <div className="min-h-screen bg-altivum-dark pt-28 pb-24">
       <SEO
         title="Blueprint"
-        description="Describe what you want to build and receive an AWS architecture blueprint: Mermaid diagram, IaC scaffold, IAM highlights, cost estimate, and Claude Code artifacts — powered by Claude Opus 4.6."
-        keywords="AWS architecture, blueprint, AWS CDK, SAM, Terraform, Claude Opus, serverless, RAG, Christian Perez"
+        description="Describe what you want to build and receive an AWS architecture blueprint: Mermaid diagram, IaC scaffold, IAM highlights, cost estimate, and Claude Code artifacts."
+        keywords="AWS architecture, blueprint, AWS CDK, SAM, Terraform, AI design, serverless, RAG, Christian Perez"
         url="https://thechrisgrey.com/blueprint"
         breadcrumbs={breadcrumbs}
         structuredData={structuredData}
@@ -172,8 +172,8 @@ export default function Blueprint() {
                 Describe your project
               </h2>
               <p className="text-altivum-silver" style={typography.bodyText}>
-                Keep it short and specific. Opus gives back sharper blueprints when you name constraints (budget,
-                latency, compliance) up front.
+                Keep it short and specific. You get more useful blueprints when you name constraints (budget, latency,
+                compliance) up front.
               </p>
             </div>
             <BlueprintForm onSubmit={generate} isGenerating={isGenerating} />

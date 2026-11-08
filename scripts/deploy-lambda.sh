@@ -57,37 +57,15 @@ if [ -L node_modules/lambda-shared ]; then
   rm -rf node_modules/lambda-shared/node_modules
 fi
 
-echo "==> [$NAME] Verifying full module graph resolves"
-# Stub the Lambda runtime global so streaming handlers can be imported off-Lambda.
-# ESM static imports are hoisted and fully resolved/evaluated BEFORE the importing
-# module's body runs, so reaching a NON-resolution error proves the graph resolved
-# (e.g. a top-level env assertion). We abort the deploy only on true module-resolution
-# error codes — this catches the missing-module failure mode without false-failing on
-# runtime config that only exists in the deployed Lambda's environment.
-node --input-type=module -e "
-globalThis.awslambda = { streamifyResponse: (f) => f, HttpResponseStream: { from: (s) => s } };
-const MODULE_ERRORS = new Set([
-  'ERR_MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED',
-  'ERR_UNSUPPORTED_DIR_IMPORT', 'ERR_PACKAGE_IMPORT_NOT_DEFINED',
-]);
-try {
-  await import('./index.mjs');
-  console.log('module graph OK');
-} catch (err) {
-  if (MODULE_ERRORS.has(err && err.code)) {
-    console.error('MODULE RESOLUTION FAILED:', err.code, '-', err.message);
-    process.exit(1);
-  }
-  console.log('module graph OK (top-level threw post-resolution: ' + ((err && (err.code || err.name)) || 'Error') + ' — expected without runtime env)');
-}
-" || { echo "FAILED: module graph did not resolve — aborting deploy" >&2; exit 1; }
-
 echo "==> [$NAME] Zipping"
 rm -f function.zip
 zip -rq function.zip . \
   -x '__tests__/*' -x '__fixtures__/*' -x '*.test.mjs' \
   -x 'function.zip' -x '*.zip' -x 'README.md' \
   -x 'node_modules/lambda-shared/node_modules/*'
+
+echo "==> [$NAME] Verifying isolated deployment package"
+node "$ROOT/scripts/verify-lambda-package.mjs" "$DIR/function.zip"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "==> [$NAME] Dry run — built function.zip ($(du -h function.zip | cut -f1)); skipping upload."

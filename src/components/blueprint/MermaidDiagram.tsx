@@ -35,7 +35,8 @@ export function MermaidDiagram({ source }: MermaidDiagramProps) {
           startOnLoad: false,
           theme: 'dark',
           securityLevel: 'strict',
-          fontFamily: '"SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, sans-serif',
+          htmlLabels: false,
+          fontFamily: typography.bodyText.fontFamily,
           themeVariables: {
             primaryColor: '#1A2332',
             primaryTextColor: '#FFFFFF',

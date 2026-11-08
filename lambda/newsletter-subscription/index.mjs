@@ -5,7 +5,8 @@ import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-sec
 import { checkRateLimit } from "lambda-shared/rateLimit";
 import { createLogger } from "lambda-shared/logger";
 import { readSecretString } from "lambda-shared/secrets";
-import { verifyTurnstile } from "lambda-shared/turnstile";
+import { verifyTurnstile, isTurnstileConfigured } from "lambda-shared/turnstile";
+import { createConfirmationService } from "./confirmation.mjs";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_API_URL = "https://api.resend.com";
@@ -42,6 +43,7 @@ function extractApiKey(secret) {
 async function resendRequest(fetchImpl, apiKey, path, init) {
   return fetchImpl(`${RESEND_API_URL}${path}`, {
     ...init,
+    signal: AbortSignal.timeout(8000),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       ...init.headers,
@@ -50,9 +52,7 @@ async function resendRequest(fetchImpl, apiKey, path, init) {
 }
 
 /**
- * Create or reactivate a Resend contact, then place it in the configured
- * newsletter segment. A duplicate contact is normal for a repeat signup, not
- * an error. An explicit resubmission is treated as renewed consent.
+ * Activate a contact only after a single-use mailbox confirmation is consumed.
  */
 export async function subscribeContact({ apiKey, email, segmentId, fetchImpl = fetch }) {
   const createResponse = await resendRequest(fetchImpl, apiKey, "/contacts", {
@@ -95,10 +95,28 @@ export async function subscribeContact({ apiKey, email, segmentId, fetchImpl = f
 /**
  * Create the newsletter handler with injectable integrations for unit tests.
  */
-export function createNewsletterHandler({ checkRateLimitImpl, verifyTurnstileImpl, getApiKey, subscribe, config }) {
+export function createNewsletterHandler({
+  checkRateLimitImpl,
+  verifyTurnstileImpl,
+  getApiKey,
+  requestConfirmation,
+  confirmSubscription,
+  config,
+}) {
+  async function handleConfirmation(token, event, requestId) {
+    try {
+      const limit = await checkRateLimitImpl(event.requestContext?.http?.sourceIp || "unknown", requestId);
+      if (!limit.allowed) return reply(429, { error: "rate_limited" });
+      const result = await confirmSubscription({ apiKey: await getApiKey(), token });
+      return result.ok ? reply(200, result) : reply(400, { error: "confirmation_invalid" });
+    } catch {
+      return reply(502, { error: "confirmation_unavailable" });
+    }
+  }
   return async function newsletterHandler(event) {
     const method = event.requestContext?.http?.method;
     if (method === "OPTIONS") return { statusCode: 204, body: "" };
+    if (!isTurnstileConfigured(config.turnstileSecret)) return reply(503, { error: "service_unavailable" });
     if (method === "GET") return reply(200, { ok: true, service: "newsletter-subscription", version: "1.0.0" });
     if (method !== "POST") return reply(405, { error: "method_not_allowed" });
 
@@ -116,8 +134,16 @@ export function createNewsletterHandler({ checkRateLimitImpl, verifyTurnstileImp
     } catch {
       return reply(400, { error: "invalid_json" });
     }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return reply(400, { error: "invalid_request" });
+    if (body.confirmationToken !== undefined) {
+      return handleConfirmation(body.confirmationToken, event, requestId);
+    }
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!EMAIL_PATTERN.test(email) || email.length > 254) return reply(400, { error: "invalid_email" });
+    const source = body.source ?? "newsletter";
+    if (source !== "newsletter" && source !== "blueprint") return reply(400, { error: "invalid_source" });
+    const segmentId = source === "blueprint" ? config.blueprintSegmentId : config.segmentId;
+    if (!segmentId) return reply(503, { error: "service_unavailable" });
 
     const clientIp = event.requestContext?.http?.sourceIp || "unknown";
     const limit = await checkRateLimitImpl(clientIp, requestId);
@@ -135,9 +161,9 @@ export function createNewsletterHandler({ checkRateLimitImpl, verifyTurnstileImp
     }
 
     try {
-      await subscribe({ apiKey: await getApiKey(), email, segmentId: config.segmentId });
-      log.info("subscription_accepted");
-      return reply(201, { ok: true });
+      await requestConfirmation({ apiKey: await getApiKey(), email, segmentId, source, origin });
+      log.info("confirmation_requested", { source });
+      return reply(202, { ok: true, confirmationRequired: true });
     } catch (error) {
       log.error("subscription_failed", { error: error instanceof Error ? error.name : "Unknown" });
       return reply(502, { error: "subscription_unavailable" });
@@ -150,6 +176,12 @@ const rateLimitClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region:
 const secretsClient = new SecretsManagerClient({ region: REGION });
 const RATE_LIMIT_TABLE = process.env.NEWSLETTER_RATE_LIMIT_TABLE || "thechrisgrey-chat-ratelimit";
 const RESEND_SECRET_ARN = process.env.RESEND_API_KEY_SECRET_ARN || "";
+const confirmation = createConfirmationService({
+  client: rateLimitClient,
+  table: process.env.NEWSLETTER_CONFIRMATION_TABLE || "",
+  from: process.env.RESEND_FROM_EMAIL || "",
+  subscribe: subscribeContact,
+});
 
 export const handler = createNewsletterHandler({
   checkRateLimitImpl: (ip, requestId) =>
@@ -161,12 +193,14 @@ export const handler = createNewsletterHandler({
       windowSeconds: 3600,
       requestId,
     }),
-  verifyTurnstileImpl: verifyTurnstile,
+  verifyTurnstileImpl: (token, secret, ip) => verifyTurnstile(token, secret, ip, fetch, { action: "newsletter" }),
   getApiKey: async () => extractApiKey(await readSecretString(secretsClient, GetSecretValueCommand, RESEND_SECRET_ARN)),
-  subscribe: subscribeContact,
+  requestConfirmation: confirmation.request,
+  confirmSubscription: confirmation.confirm,
   config: {
     allowedOrigins: parseOrigins(process.env.CORS_ORIGIN || "https://thechrisgrey.com"),
     turnstileSecret: process.env.TURNSTILE_SECRET || "",
     segmentId: process.env.RESEND_NEWSLETTER_SEGMENT_ID || "",
+    blueprintSegmentId: process.env.RESEND_BLUEPRINT_SEGMENT_ID || "",
   },
 });

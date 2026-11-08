@@ -368,7 +368,7 @@ describe('Contact Page Integration', () => {
 
       await waitFor(() => {
         const alert = screen.getByRole('alert');
-        expect(alert).toHaveTextContent('Server error');
+        expect(alert).toHaveTextContent('Please try again');
       });
     });
 
@@ -434,7 +434,7 @@ describe('Contact Page Integration', () => {
       const body = JSON.parse(options?.body as string);
       expect(body.name).toBe('Test User');
       expect(body.email).toBe('test@example.com');
-      expect(body.message).toContain('Test Subject');
+      expect(body.subject).toBe('Test Subject');
       expect(body.message).toContain('This is a valid message for testing.');
       expect(body.turnstileToken).toBe('turnstile-token');
       // Honeypot should be empty

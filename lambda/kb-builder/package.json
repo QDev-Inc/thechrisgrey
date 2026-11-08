@@ -13,7 +13,8 @@
     "@sanity/client": "^7.22.1",
     "@sentry/node": "^10.0.0",
     "posthog-node": "^5.39.4",
-    "lambda-shared": "file:../shared"
+    "lambda-shared": "file:../shared",
+    "aws-jwt-verify": "^5.2.1"
   },
   "scripts": {
     "test": "node --test __tests__/*.test.mjs"

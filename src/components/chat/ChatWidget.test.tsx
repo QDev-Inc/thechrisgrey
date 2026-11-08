@@ -102,7 +102,7 @@ describe('ChatWidget', () => {
       // to ChatWidgetPanel's container has to land in both places.
       const here = dirname(fileURLToPath(import.meta.url));
       const shell =
-        'fixed bottom-24 right-6 z-40 w-[calc(100vw-2rem)] h-[calc(100vh-8rem)] sm:w-[400px] sm:h-[560px] bg-altivum-navy border border-white/10 rounded-2xl shadow-2xl';
+        'fixed bottom-[calc(6rem+var(--consent-bottom,0px))] right-4 sm:right-6 z-40 w-[calc(100vw-2rem)] h-[calc(100dvh-11rem-var(--consent-bottom,0px))] sm:w-[400px] sm:h-[560px] bg-altivum-navy border border-white/10 rounded-2xl shadow-2xl';
 
       expect(readFileSync(resolve(here, 'ChatWidget.tsx'), 'utf8')).toContain(shell);
       expect(readFileSync(resolve(here, 'ChatWidgetPanel.tsx'), 'utf8')).toContain(shell);

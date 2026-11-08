@@ -126,11 +126,8 @@ jobs:
           path: lambda-test-results.xml
           retention-days: 14
 
-      - name: Audit production dependencies (informational — does not gate merges)
-        # npm audit checks the live advisory DB, so a hard gate here flips CI red on
-        # newly-published CVEs in transitive deps with no code change. Kept visible but
-        # non-blocking; durable remediation is tracked via Dependabot (.github/dependabot.yml).
-        run: npm audit --audit-level=high --omit=dev || echo "::warning::Production dependency audit found high-severity advisories (non-blocking) — see Dependabot PRs."
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high --omit=dev
 
       - name: Build project
         run: npm run build
@@ -240,8 +237,8 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
-      - name: Audit Lambda dependencies (informational — does not gate merges)
-        # Install failures stay fatal (real problems); audit findings are non-blocking
+      - name: Audit Lambda production dependencies
+        # Install failures and high-severity production advisories block release.
         # (advisory-DB drift). Durable remediation is tracked via Dependabot.
         run: |
           set -e
@@ -255,7 +252,7 @@ jobs:
             # --ignore-scripts: audit only needs the dependency tree, not postinstall
             # native-binary downloads (e.g. @anthropic-ai/claude-code) that fail in CI.
             (cd "$dir" && npm install --no-audit --no-fund --no-workspaces --ignore-scripts)
-            (cd "$dir" && npm audit --audit-level=high --omit=dev) || echo "::warning::$dir has high-severity advisories (non-blocking) — see Dependabot PRs."
+            (cd "$dir" && npm audit --audit-level=high --omit=dev)
           done
 
   build-performance:

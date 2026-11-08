@@ -84,7 +84,10 @@ const ChatContent = () => {
     // a scroll keeps that class of bug from ever making the input unreachable again.
     // data-lenis-prevent lets it take the wheel/touch gesture natively rather than
     // having site-wide Lenis hijack it.
-    <div className="h-screen pt-20 flex flex-col bg-altivum-dark overflow-y-auto" data-lenis-prevent>
+    <div
+      className="h-[calc(100dvh-var(--consent-bottom,0px))] pt-20 flex flex-col bg-altivum-dark overflow-y-auto"
+      data-lenis-prevent
+    >
       <SEO
         title="Alti - Altivum's AI Agent"
         description="Meet Alti, Altivum's AI agent. Have a conversation about Christian Perez's journey from Green Beret to tech founder, Altivum Inc, The Vector Podcast, and more."

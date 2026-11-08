@@ -16,6 +16,7 @@ export const VALID_PATHS = new Set([
   "/links",
   "/chat",
   "/privacy",
+  "/newsletter/confirm",
   "/admin",
   "/blueprint",
 ]);

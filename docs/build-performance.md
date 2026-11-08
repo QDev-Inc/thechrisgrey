@@ -47,3 +47,22 @@ treat a raise as a conscious decision rather than a rubber stamp.
 The `build-performance` CI job is non-blocking (`continue-on-error: true`): it
 reports regressions and budget breaches in the run summary without gating
 merges, so performance stays visible without becoming a flaky merge blocker.
+
+## Image and initial-load checks
+
+Both production build paths validate the three responsive portrait JPEGs and
+the original PNG with `scripts/check-critical-images.mjs`. Keep the PNG
+fallback and verify decoded images on Amplify after deployment. Do not replace
+these assets with WebP without repeating the hosted checks.
+
+`node scripts/verify-site-browser.mjs <origin> <report-directory>` checks
+14 routes at mobile and desktop widths, image responses and decoding, layout
+overflow, five navigation breakpoints, and a deliberately failed JPEG request
+that must recover to the original PNG. Each fresh homepage load has a 1 MB
+transfer ceiling and must not eagerly request Three.js or diagram bundles.
+
+The total JavaScript gzip ceiling is 2,550 KB after the Mermaid 12 security
+update added its lazy ELK layout dependency. This does not relax the entry
+chunk's 55 KB gzip limit or the homepage's independent initial-transfer check.
+The verified Amplify build transferred approximately 395 KB on mobile and
+430 KB on desktop before interaction.

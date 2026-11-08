@@ -147,3 +147,8 @@ test("sendContactEmail surfaces a Resend failure without exposing its response",
     /resend_email_422/,
   );
 });
+
+test("missing Turnstile configuration rejects requests", async () => {
+  const response = await makeHandler({ config: { turnstileSecret: "" } })(makeEvent({ body: validBody() }));
+  assert.equal(response.statusCode, 503);
+});

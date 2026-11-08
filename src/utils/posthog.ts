@@ -47,10 +47,23 @@ export async function enablePostHog(): Promise<void> {
       api_host: POSTHOG_HOST,
       capture_pageview: false, // captured manually per SPA route change (see App.tsx)
       capture_pageleave: true,
-      autocapture: true,
+      autocapture: false,
       persistence: 'localStorage+cookie',
       // Session replay never records form-field values (newsletter/contact emails, etc.).
-      session_recording: { maskAllInputs: true },
+      disable_session_recording: true,
+      before_send: (event) => {
+        if (!event || window.location.pathname === '/admin') return null;
+        for (const key of Object.keys(event.properties)) {
+          if (!/url|referrer/i.test(key) || typeof event.properties[key] !== 'string') continue;
+          try {
+            const url = new URL(event.properties[key], window.location.origin);
+            event.properties[key] = `${url.origin}${url.pathname}`;
+          } catch {
+            delete event.properties[key];
+          }
+        }
+        return event;
+      },
     });
     instance = posthog;
     // Re-resolve feature flags whenever PostHog delivers an updated set (initial

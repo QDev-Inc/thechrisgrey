@@ -153,13 +153,13 @@ describe('Contact multi-intent flow', () => {
 
     const [, options] = fetchSpy.mock.calls[0];
     const body = JSON.parse(options?.body as string);
-    expect(body.message).toContain('Keynote request');
+    expect(body.subject).toBe('Keynote request');
     expect(body.message).toContain('We would love to host you at our summit.');
-    expect(body.message).toContain('Intent: Speaking engagement');
-    expect(body.message).toContain('Organization: Acme Summit');
-    expect(body.message).toContain('Event date: 2026-09-15');
-    expect(body.message).toContain('Audience size: 200-500');
-    expect(body.message).toContain('Event format: Keynote');
+    expect(body.details).toContain('Intent: Speaking engagement');
+    expect(body.details).toContain('Organization: Acme Summit');
+    expect(body.details).toContain('Event date: 2026-09-15');
+    expect(body.details).toContain('Audience size: 200-500');
+    expect(body.details).toContain('Event format: Keynote');
     expect(body.turnstileToken).toBe('turnstile-token');
   });
 

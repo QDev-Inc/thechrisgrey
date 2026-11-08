@@ -15,7 +15,7 @@ info:
     allowlisted, with `Vary: Origin` and `Access-Control-Allow-Credentials: true`.
 
     `tools/call` requires a valid server-issued session token
-    (`Authorization: Bearer <token>`, scope `chat` or the configured
+    (`Authorization: Bearer <token>`, scope `mcp` or the configured
     `MCP_SESSION_TOKEN_SCOPE`); missing or invalid tokens return 401/403.
     Discovery methods (`initialize`, `tools/list`, `ping`) remain open so MCP
     clients can negotiate the protocol before presenting credentials.
@@ -44,7 +44,7 @@ paths:
         return 202 with no body.
 
         `tools/call` requires a valid `Authorization: Bearer <session-token>`
-        header (scope `chat`); `initialize`, `tools/list`, and `ping` are
+        header (scope `mcp`); `initialize`, `tools/list`, and `ping` are
         unauthenticated (discovery handshake). A missing/invalid token on
         `tools/call` returns 401/403 with a JSON-RPC error (code -32001).
       parameters:
@@ -143,7 +143,7 @@ components:
       type: http
       scheme: bearer
       description: |
-        Server-issued session token (scope `chat` or the configured
+        Server-issued session token (scope `mcp` or the configured
         `MCP_SESSION_TOKEN_SCOPE`), required for `tools/call`. Issued by the
         session-token Lambda after a Cloudflare Turnstile check.
     none:

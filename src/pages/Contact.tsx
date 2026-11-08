@@ -3,7 +3,7 @@ import Breadcrumbs from '../components/Breadcrumbs';
 import { typography } from '../utils/typography';
 import { isValidEmail } from '../utils/validators';
 import { useState, useEffect, FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { contactFAQs, buildContactPageSchema } from '../utils/schemas';
 import { SOCIAL_LINKS } from '../constants/links';
 import { useFocusTrap } from '../hooks';
@@ -100,6 +100,8 @@ const CONTACT_CHANNELS: ContactChannel[] = [
 
 const Contact = () => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -121,13 +123,14 @@ const Contact = () => {
   // State is adjusted during render (not in an effect) so a repeat handoff while the page
   // is already mounted still prefills. URLSearchParams.get returns decoded values; sliced
   // to the same caps the inputs enforce.
-  const paramsKey = searchParams.toString();
+  const draft = location.state?.draft as { subject?: string; message?: string; intent?: string } | undefined;
+  const paramsKey = `${location.key}:${searchParams.toString()}`;
   const [appliedParamsKey, setAppliedParamsKey] = useState<string | null>(null);
   if (appliedParamsKey !== paramsKey) {
     setAppliedParamsKey(paramsKey);
-    const subjectParam = searchParams.get('subject');
-    const messageParam = searchParams.get('message');
-    const intentParam = searchParams.get('intent');
+    const subjectParam = typeof draft?.subject === 'string' ? draft.subject : searchParams.get('subject');
+    const messageParam = typeof draft?.message === 'string' ? draft.message : searchParams.get('message');
+    const intentParam = typeof draft?.intent === 'string' ? draft.intent : searchParams.get('intent');
     if (subjectParam || messageParam) {
       setFormData((prev) => ({
         ...prev,
@@ -139,6 +142,12 @@ const Contact = () => {
       setIntent(intentParam);
     }
   }
+
+  useEffect(() => {
+    if (location.search.includes('subject=') || location.search.includes('message=')) {
+      navigate('/contact', { replace: true, state: location.state });
+    }
+  }, [location.search, location.state, navigate]);
 
   // Dirty-form detection
   const isDirty = !!(
@@ -217,12 +226,11 @@ const Contact = () => {
           ]
         : []),
     ].filter(Boolean);
-    const detailBlock = detailLines.length > 0 ? `${detailLines.join('\n')}\n\n` : '';
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      const turnstileToken = await getTurnstileToken();
+      const turnstileToken = await getTurnstileToken('contact');
       const controller = new AbortController();
       timeoutId = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(
@@ -235,7 +243,9 @@ const Contact = () => {
           body: JSON.stringify({
             name: formData.name.trim(),
             email: formData.email.trim(),
-            message: `Subject: ${formData.subject.trim() || 'No subject'}\n\n${detailBlock}${formData.message.trim()}`,
+            message: formData.message.trim(),
+            subject: formData.subject.trim(),
+            details: detailLines.join('\n'),
             website: formData.website, // honeypot
             turnstileToken,
           }),
@@ -243,7 +253,7 @@ const Contact = () => {
         }),
       );
 
-      const result = await response.json();
+      await response.json();
 
       if (response.ok) {
         setFormData({ name: '', email: '', subject: '', message: '', website: '' });
@@ -259,7 +269,10 @@ const Contact = () => {
       } else {
         setFormStatus({
           type: 'error',
-          message: result.error || 'Failed to send message. Please try again.',
+          message:
+            response.status === 400
+              ? 'Please check your contact details and message length.'
+              : 'Your message could not be sent. Please try again later or use the email link below.',
         });
       }
     } catch (error) {
@@ -319,7 +332,7 @@ const Contact = () => {
         <Breadcrumbs items={breadcrumbs} />
       </div>
       {/* Hero Section */}
-      <section className="py-32 bg-altivum-dark">
+      <section className="pt-8 pb-8 md:pt-12 md:pb-10 bg-altivum-dark">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="max-w-4xl">
             <h1 className="text-white mb-6" style={typography.heroHeader}>
@@ -333,87 +346,8 @@ const Contact = () => {
         </div>
       </section>
 
-      {/* Speaking & Media Section */}
-      <div className="h-px bg-linear-to-r from-transparent via-altivum-gold/15 to-transparent" />
-      <section className="py-20 bg-altivum-navy/30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-            {/* Speaking Topics */}
-            <div>
-              <h2 id={slugify('Speaking & Media')} className="text-white mb-6" style={typography.sectionHeader}>
-                Speaking & Media
-              </h2>
-              <p className="text-altivum-silver mb-8" style={typography.bodyText}>
-                Available for keynotes, panels, podcasts, and media appearances on topics including:
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { icon: 'cloud', title: 'Cloud & AI Strategy', desc: 'Enterprise transformation and emerging tech' },
-                  { icon: 'military_tech', title: 'Veteran Transition', desc: 'Military to civilian career success' },
-                  { icon: 'rocket_launch', title: 'Entrepreneurship', desc: 'Building veteran-owned businesses' },
-                  { icon: 'psychology', title: 'Leadership', desc: 'Special Operations lessons for business' },
-                ].map((topic) => (
-                  <div
-                    key={topic.title}
-                    className="p-5 bg-altivum-dark/50 border border-white/5 hover:border-altivum-gold/30 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-altivum-gold/5 transition-all duration-300"
-                  >
-                    <Icon name={topic.icon} className="text-altivum-gold mb-3 block" />
-                    <h3 id={slugify(topic.title)} className="text-white text-sm font-medium mb-1">
-                      {topic.title}
-                    </h3>
-                    <p className="text-altivum-silver text-xs">{topic.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Event Types & Press Kit */}
-            <div className="lg:pt-16">
-              <h3 id={slugify('Event Types')} className="text-white mb-6" style={typography.cardTitleLarge}>
-                Event Types
-              </h3>
-              <ul className="space-y-3 mb-10">
-                {[
-                  'Keynote presentations',
-                  'Panel discussions',
-                  'Podcast guest appearances',
-                  'Corporate workshops',
-                  'Media interviews',
-                  'Veteran organization events',
-                ].map((item) => (
-                  <li key={item} className="flex items-center text-altivum-silver">
-                    <Icon name="arrow_forward" className="text-altivum-gold mr-3 text-sm" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              {/* Press Kit Download */}
-              <div className="p-6 bg-altivum-dark border border-altivum-gold/20">
-                <h4 className="text-white mb-2" style={typography.cardTitleSmall}>
-                  For Event Organizers
-                </h4>
-                <p className="text-altivum-silver text-sm mb-4">
-                  Download press materials including bio and headshots for promotional use.
-                </p>
-                <a
-                  href="/press-kit.zip"
-                  download
-                  className="inline-flex items-center gap-2 px-5 py-3 bg-altivum-gold/10 border border-altivum-gold text-altivum-gold text-sm font-medium uppercase tracking-wider hover:bg-altivum-gold hover:text-altivum-dark transition-all duration-300"
-                >
-                  <Icon name="download" className="text-lg" />
-                  Download Press Kit
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <div className="h-px bg-linear-to-r from-transparent via-altivum-gold/15 to-transparent" />
-
       {/* Contact Form Section */}
-      <section className="py-24 bg-altivum-dark">
+      <section className="pt-4 pb-16 bg-altivum-dark">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
             {/* Contact Form */}
@@ -421,7 +355,7 @@ const Contact = () => {
               <h2 id={slugify('Send a Message')} className="text-white mb-8" style={typography.sectionHeader}>
                 Send a Message
               </h2>
-              <form className="space-y-10" onSubmit={handleSubmit} noValidate>
+              <form className="space-y-6" onSubmit={handleSubmit} noValidate>
                 <div className="group">
                   <label
                     htmlFor="intent"
@@ -761,6 +695,85 @@ const Contact = () => {
           </div>
         </div>
       </section>
+
+      {/* Speaking & Media Section */}
+      <div className="h-px bg-linear-to-r from-transparent via-altivum-gold/15 to-transparent" />
+      <section className="py-20 bg-altivum-navy/30">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+            {/* Speaking Topics */}
+            <div>
+              <h2 id={slugify('Speaking & Media')} className="text-white mb-6" style={typography.sectionHeader}>
+                Speaking & Media
+              </h2>
+              <p className="text-altivum-silver mb-8" style={typography.bodyText}>
+                Available for keynotes, panels, podcasts, and media appearances on topics including:
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { icon: 'cloud', title: 'Cloud & AI Strategy', desc: 'Enterprise transformation and emerging tech' },
+                  { icon: 'military_tech', title: 'Veteran Transition', desc: 'Military to civilian career success' },
+                  { icon: 'rocket_launch', title: 'Entrepreneurship', desc: 'Building veteran-owned businesses' },
+                  { icon: 'psychology', title: 'Leadership', desc: 'Special Operations lessons for business' },
+                ].map((topic) => (
+                  <div
+                    key={topic.title}
+                    className="p-5 bg-altivum-dark/50 border border-white/5 hover:border-altivum-gold/30 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-altivum-gold/5 transition-all duration-300"
+                  >
+                    <Icon name={topic.icon} className="text-altivum-gold mb-3 block" />
+                    <h3 id={slugify(topic.title)} className="text-white text-sm font-medium mb-1">
+                      {topic.title}
+                    </h3>
+                    <p className="text-altivum-silver text-xs">{topic.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Event Types & Press Kit */}
+            <div className="lg:pt-16">
+              <h3 id={slugify('Event Types')} className="text-white mb-6" style={typography.cardTitleLarge}>
+                Event Types
+              </h3>
+              <ul className="space-y-3 mb-10">
+                {[
+                  'Keynote presentations',
+                  'Panel discussions',
+                  'Podcast guest appearances',
+                  'Corporate workshops',
+                  'Media interviews',
+                  'Veteran organization events',
+                ].map((item) => (
+                  <li key={item} className="flex items-center text-altivum-silver">
+                    <Icon name="arrow_forward" className="text-altivum-gold mr-3 text-sm" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Press Kit Download */}
+              <div className="p-6 bg-altivum-dark border border-altivum-gold/20">
+                <h4 className="text-white mb-2" style={typography.cardTitleSmall}>
+                  For Event Organizers
+                </h4>
+                <p className="text-altivum-silver text-sm mb-4">
+                  Download press materials including bio and headshots for promotional use.
+                </p>
+                <a
+                  href="/press-kit.zip"
+                  download
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-altivum-gold/10 border border-altivum-gold text-altivum-gold text-sm font-medium uppercase tracking-wider hover:bg-altivum-gold hover:text-altivum-dark transition-all duration-300"
+                >
+                  <Icon name="download" className="text-lg" />
+                  Download Press Kit
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="h-px bg-linear-to-r from-transparent via-altivum-gold/15 to-transparent" />
 
       {/* Social proof for speaking/consulting (renders only once real testimonials exist) */}
       <Testimonials eyebrow="Trusted by" heading="What clients and partners say" />

@@ -20,9 +20,11 @@ describe('RateLimitedCard', () => {
     expect(status).toHaveAttribute('aria-live', 'polite');
   });
 
-  it('should explain the Opus 4.6 free-tier rationale', () => {
+  it('should explain the free-tier generation allowance', () => {
     render(<RateLimitedCard message="Try again later." />);
-    expect(screen.getByText(/Opus 4\.6 is expensive to run at scale/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/The free tier includes a limited number of architecture generations/i),
+    ).toBeInTheDocument();
   });
 
   it('should render the embedded Pro waitlist with custom heading and subheading', () => {

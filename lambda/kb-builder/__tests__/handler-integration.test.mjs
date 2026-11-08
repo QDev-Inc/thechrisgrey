@@ -22,6 +22,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { accessToken, configureCognito, SUBJECT } from "../../shared/__fixtures__/cognito.mjs";
+configureCognito((await import("lambda-shared/auth")).getCognitoVerifier);
+const adminToken = accessToken();
 
 // ── Env setup BEFORE importing the handler ──────────────────────────────────
 process.env.SANITY_WRITE_TOKEN = "test-token";
@@ -51,6 +54,7 @@ CognitoIdentityProviderClient.prototype.send = async function (cmd) {
   return {
     Username: "admin",
     UserAttributes: [
+      { Name: "sub", Value: SUBJECT },
       { Name: "email", Value: "admin@altivum.ai" },
       { Name: "email_verified", Value: "true" },
     ],
@@ -116,7 +120,7 @@ const { handler } = await import("../index.mjs");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeEvent({ method = "GET", path = "/entries", body, auth = "Bearer valid-token", ip = "9.9.9.9" } = {}) {
+function makeEvent({ method = "GET", path = "/entries", body, auth = `Bearer ${adminToken}`, ip = "9.9.9.9" } = {}) {
   const headers = {};
   if (auth) headers.authorization = auth;
   return {
@@ -139,10 +143,10 @@ const VALID_ENTRY = {
 
 // ── Tests: HTTP routing, auth, rate limiting, validation ────────────────────
 
-test("OPTIONS preflight returns 200 with CORS headers", async () => {
+test("OPTIONS fallback returns 200 without duplicating Function URL CORS headers", async () => {
   const res = await handler(makeEvent({ method: "OPTIONS" }));
   assert.equal(res.statusCode, 200);
-  assert.equal(res.headers["Access-Control-Allow-Origin"], "https://thechrisgrey.com");
+  assert.equal(res.headers["Access-Control-Allow-Origin"], undefined);
   const body = parseBody(res);
   assert.equal(body.ok, true);
 });

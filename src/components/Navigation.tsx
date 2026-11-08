@@ -17,17 +17,13 @@ const Navigation = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAboutDropdownOpen, setIsAboutDropdownOpen] = useState(false);
   const [focusedDropdownIndex, setFocusedDropdownIndex] = useState(-1);
+  const dropdownButtonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownItemsRef = useRef<(HTMLAnchorElement | null)[]>([]);
 
   useEffect(() => {
     const updateScrollState = () => {
-      if (location.pathname === '/') {
-        const summaryEndPosition = window.innerHeight * 10;
-        setIsScrolled(window.scrollY > summaryEndPosition);
-      } else {
-        setIsScrolled(window.scrollY > 20);
-      }
+      setIsScrolled(window.scrollY > 20);
     };
 
     // Initial check
@@ -92,10 +88,7 @@ const Navigation = () => {
           e.preventDefault();
           setIsAboutDropdownOpen(false);
           setFocusedDropdownIndex(-1);
-          break;
-        case 'Tab':
-          setIsAboutDropdownOpen(false);
-          setFocusedDropdownIndex(-1);
+          dropdownButtonRef.current?.focus();
           break;
       }
     },
@@ -111,7 +104,7 @@ const Navigation = () => {
   return (
     <nav
       data-vt-persist="navigation"
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 opacity-0 animate-nav-fade-in ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled ? 'bg-altivum-navy/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
       }`}
     >
@@ -141,7 +134,7 @@ const Navigation = () => {
           </ViewTransitionLink>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-1 lg:ml-auto lg:-mr-40">
+          <div className="hidden lg:flex items-center gap-1 ml-auto">
             <ViewTransitionLink
               to="/"
               className={`px-4 py-2 rounded-md text-sm font-medium tracking-wide transition-all duration-200 ${
@@ -154,11 +147,22 @@ const Navigation = () => {
             </ViewTransitionLink>
 
             {/* About Dropdown */}
-            <div className="relative" ref={dropdownRef} onKeyDown={handleDropdownKeyDown}>
+            <div
+              className="relative"
+              ref={dropdownRef}
+              onKeyDown={handleDropdownKeyDown}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setIsAboutDropdownOpen(false);
+                  setFocusedDropdownIndex(-1);
+                }
+              }}
+            >
               <button
+                ref={dropdownButtonRef}
                 onClick={() => {
                   setIsAboutDropdownOpen(!isAboutDropdownOpen);
-                  setFocusedDropdownIndex(-1);
+                  setFocusedDropdownIndex(isAboutDropdownOpen ? -1 : 0);
                 }}
                 className={`px-4 py-2 rounded-md text-sm font-medium tracking-wide transition-all duration-200 flex items-center ${
                   isAboutActive()
@@ -242,7 +246,7 @@ const Navigation = () => {
           {/* Mobile menu button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 rounded-md text-altivum-silver hover:text-white hover:bg-altivum-blue/20"
+            className="lg:hidden p-3 min-w-11 min-h-11 rounded-md text-altivum-silver hover:text-white hover:bg-altivum-blue/20"
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}
           >
@@ -252,7 +256,7 @@ const Navigation = () => {
 
         {/* Mobile Navigation */}
         {isMobileMenuOpen && (
-          <div className="md:hidden pb-4 bg-altivum-navy/95 backdrop-blur-md">
+          <div className="lg:hidden pb-4 bg-altivum-navy/95 backdrop-blur-md">
             <div className="flex flex-col space-y-2">
               <ViewTransitionLink
                 to="/"

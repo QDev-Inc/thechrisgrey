@@ -32,7 +32,8 @@
  *   - S3 bucket: thechrisgrey-rum-sourcemaps (for source map resolution)
  */
 
-import { AwsRum, type AwsRumConfig } from 'aws-rum-web';
+import type { AwsRum, AwsRumConfig } from 'aws-rum-web';
+import { sanitizeTelemetry } from './telemetryPrivacy';
 import { createLogger } from './logger';
 import { getConsent } from './consent';
 
@@ -46,7 +47,9 @@ const RELEASE_ID = import.meta.env.VITE_RUM_RELEASE_ID || 'dev';
 // Skip initialization in test environments to avoid Cognito network calls.
 const isTestEnv = import.meta.env.MODE === 'test' || !!import.meta.env.VITEST;
 
-const isInitialized = !isTestEnv && APP_MONITOR_ID.length > 0 && IDENTITY_POOL_ID.length > 0;
+const isConfigured =
+  !isTestEnv && import.meta.env.VITE_ENABLE_RUM === 'true' && APP_MONITOR_ID.length > 0 && IDENTITY_POOL_ID.length > 0;
+let isInitialized = false;
 
 let awsRum: AwsRum | null = null;
 
@@ -68,7 +71,12 @@ let userContext: Record<string, unknown> = {};
  * to provide context about what the user was doing before the error occurred.
  */
 export function addBreadcrumb(type: Breadcrumb['type'], message: string, data?: Record<string, unknown>): void {
-  breadcrumbs.push({ timestamp: new Date().toISOString(), type, message, data });
+  breadcrumbs.push({
+    timestamp: new Date().toISOString(),
+    type,
+    message: sanitizeTelemetry(message),
+    data: sanitizeTelemetry(data),
+  });
   if (breadcrumbs.length > MAX_BREADCRUMBS) {
     breadcrumbs.shift();
   }
@@ -94,23 +102,24 @@ export function setUserContext(context: Record<string, unknown>): void {
 
 // ── RUM initialization ──────────────────────────────────────────────────────
 
-if (isInitialized) {
-  try {
-    const config: AwsRumConfig = {
-      // Cookieless unless the visitor has already accepted (returning consenter).
-      // A live Accept flips this at runtime via grantRumCookies().
-      allowCookies: getConsent() === 'granted',
-      identityPoolId: IDENTITY_POOL_ID,
-      sessionSampleRate: 1,
-      endpoint: `https://dataplane.rum.${REGION}.amazonaws.com`,
-      telemetries: ['errors', 'performance', 'http'],
-      releaseId: RELEASE_ID,
-    };
+if (isConfigured) {
+  void import('aws-rum-web')
+    .then(({ AwsRum }) => {
+      const config: AwsRumConfig = {
+        // Cookieless unless the visitor has already accepted (returning consenter).
+        // A live Accept flips this at runtime via grantRumCookies().
+        allowCookies: getConsent() === 'granted',
+        identityPoolId: IDENTITY_POOL_ID,
+        sessionSampleRate: 1,
+        endpoint: `https://dataplane.rum.${REGION}.amazonaws.com`,
+        telemetries: ['performance'],
+        releaseId: RELEASE_ID,
+      };
 
-    awsRum = new AwsRum(APP_MONITOR_ID, '1.0.0', REGION, config);
-  } catch {
-    // Ignore errors during RUM initialization — the app must still work.
-  }
+      awsRum = new AwsRum(APP_MONITOR_ID, '1.0.0', REGION, config);
+      isInitialized = true;
+    })
+    .catch(() => undefined);
 }
 
 // ── Global error handlers ───────────────────────────────────────────────────
@@ -166,8 +175,8 @@ export function captureError(error: Error, context?: Record<string, unknown>) {
     userContext,
     breadcrumbs: getBreadcrumbs(),
   };
-  awsRum.recordEvent('error_context', errorContext);
-  awsRum.recordError(error);
+  awsRum.recordEvent('error_context', sanitizeTelemetry(errorContext));
+  awsRum.recordError(new Error(sanitizeTelemetry(error.message)));
 }
 
 /**
@@ -176,7 +185,7 @@ export function captureError(error: Error, context?: Record<string, unknown>) {
 export function recordEvent(eventType: string, eventData?: Record<string, unknown>) {
   addBreadcrumb('custom', eventType, eventData);
   if (!awsRum) return;
-  awsRum.recordEvent(eventType, eventData || {});
+  awsRum.recordEvent(eventType, sanitizeTelemetry(eventData || {}));
 }
 
 /**
@@ -185,7 +194,7 @@ export function recordEvent(eventType: string, eventData?: Record<string, unknow
 export function recordPageView(pageId: string) {
   addBreadcrumb('navigation', pageId);
   if (!awsRum) return;
-  awsRum.recordPageView(pageId);
+  awsRum.recordPageView(pageId.split(/[?#]/)[0]);
 }
 
 // ── Cookie consent controls ─────────────────────────────────────────────────
