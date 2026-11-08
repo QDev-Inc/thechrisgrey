@@ -44,7 +44,7 @@ export function Waitlist({
     let timeoutId: number | undefined;
 
     try {
-      const turnstileToken = await getTurnstileToken();
+      const turnstileToken = await getTurnstileToken('newsletter');
       const controller = new AbortController();
       timeoutId = window.setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(
@@ -115,7 +115,7 @@ export function Waitlist({
       {status.kind === 'success' ? (
         <div className="flex items-start gap-2 text-emerald-300" style={typography.bodyText} role="status">
           <Icon name="mark_email_read" className="text-sm mt-0.5" aria-hidden="true" />
-          <span>You're on the list. Watch your inbox for early Pro access.</span>
+          <span>Check your inbox and confirm your email to join the Blueprint waitlist.</span>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">

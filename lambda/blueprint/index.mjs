@@ -24,7 +24,8 @@
  */
 
 import { randomUUID } from "crypto";
-import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
+import { ApplyGuardrailCommand, BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
+import { createInferenceClient } from "lambda-shared/inference";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { CloudWatchClient } from "@aws-sdk/client-cloudwatch";
@@ -40,21 +41,22 @@ import { captureProductEvent, flushProductAnalytics } from "lambda-shared/produc
 import { generateBlueprint } from "./engine.mjs";
 import { resolveOpusDeadlineMs } from "./bedrock.mjs";
 import { createGoldenExamplesFetcher } from "./goldenExamples.mjs";
+import { BlueprintInputSchema } from "./schema.mjs";
+import { createBlueprintQuota } from "./quota.mjs";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "https://thechrisgrey.com";
 const SIGNING_KEY = process.env.BLUEPRINT_SIGNING_KEY || "";
 const SESSION_TOKEN_KEY = process.env.SESSION_TOKEN_KEY || "";
 const RATE_LIMIT_TABLE =
   process.env.BLUEPRINT_RATE_LIMIT_TABLE || process.env.CHAT_RATE_LIMIT_TABLE || "thechrisgrey-chat-ratelimit";
-const RATE_LIMIT_MAX = 1;
-const RATE_LIMIT_WINDOW_SECONDS = 30 * 24 * 60 * 60; // 30 days
 // Max raw body size accepted before JSON parsing. Guards against oversized spec
 // payloads that would otherwise consume Bedrock Opus budget / trigger deep
 // validation on adversarial input. Default 1 MiB; override via env for tuning.
 const MAX_BODY_BYTES = Number(process.env.BLUEPRINT_MAX_BODY_BYTES || 1024 * 1024);
 
-const bedrockClient = new BedrockRuntimeClient({ region: REGION });
+const bedrockClient = createInferenceClient(new BedrockRuntimeClient({ region: REGION }), ApplyGuardrailCommand, {
+  timeoutMs: 45000,
+});
 const dynamoClient = new DynamoDBClient({ region: REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const cloudwatchClient = new CloudWatchClient({ region: REGION });
@@ -66,8 +68,8 @@ const sanityClient = sanityProjectId
       projectId: sanityProjectId,
       dataset: sanityDataset,
       apiVersion: process.env.SANITY_API_VERSION || "2024-01-01",
-      token: process.env.SANITY_READ_TOKEN || undefined,
-      useCdn: !process.env.SANITY_READ_TOKEN,
+      perspective: "published",
+      useCdn: true,
       timeout: 4000,
     })
   : null;
@@ -79,15 +81,6 @@ if (!SESSION_TOKEN_KEY && !SIGNING_KEY) {
   createLogger(null, { service: "blueprint" }).warn("startup_warning", {
     message: "Neither SESSION_TOKEN_KEY nor BLUEPRINT_SIGNING_KEY set — request authentication disabled",
   });
-}
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": CORS_ORIGIN,
-    "Access-Control-Allow-Headers": "Content-Type, x-blueprint-timestamp, x-blueprint-signature, X-Request-Id",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "3600",
-  };
 }
 
 /** @param {string|null} requestId @param {string} event @param {any} [extra] */
@@ -126,6 +119,8 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
   // bytes — not change status or headers — so late errors become NDJSON events.
   let streamOpened = false;
   let ndjsonMode = false;
+  /** @type {ReturnType<typeof createBlueprintQuota>|undefined} */
+  let quota;
 
   // Commit headers + status for a buffered-style JSON response and end.
   /** @param {number} statusCode @param {any} body */
@@ -133,7 +128,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     if (streamOpened) return; // caller bug — defensive no-op
     const withMeta = awslambda.HttpResponseStream.from(responseStream, {
       statusCode,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
+      headers: { "Content-Type": "application/json" },
     });
     streamOpened = true;
     try {
@@ -152,7 +147,6 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
         headers: {
           "Content-Type": "application/x-ndjson",
           "Cache-Control": "no-cache, no-transform",
-          ...corsHeaders(),
         },
       });
       streamOpened = true;
@@ -172,7 +166,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     if (event.requestContext?.http?.method === "OPTIONS") {
       const preflight = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 204,
-        headers: corsHeaders(),
+        headers: {},
       });
       streamOpened = true;
       preflight.end();
@@ -232,6 +226,10 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       return;
     }
 
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      closeWithJson(400, { error: "invalid_input" });
+      return;
+    }
     const { spec, deviceId: rawDeviceId } = payload;
     if (!spec || typeof spec !== "object") {
       closeWithJson(400, { error: "missing_spec" });
@@ -244,25 +242,48 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       return;
     }
     const deviceHash = hashDeviceId(deviceId);
-
-    // Rate limit by deviceHash — 1 blueprint per 30-day window
-    const rateLimitResult = await checkRateLimit(docClient, UpdateCommand, {
+    if (auth.method !== "token" || auth.deviceHash !== deviceHash) {
+      closeWithJson(401, { error: "device_mismatch" });
+      return;
+    }
+    const parsedSpec = BlueprintInputSchema.safeParse(spec);
+    if (!parsedSpec.success) {
+      closeWithJson(400, { error: "invalid_input", message: "Please review the required blueprint fields." });
+      return;
+    }
+    for (const limit of [
+      { ip: event.requestContext?.http?.sourceIp || "unknown", prefix: "blueprint-attempt-", maxRequests: 5 },
+      { ip: "service", prefix: "blueprint-budget-", maxRequests: 20 },
+      { ip: "service", prefix: "blueprint-daily-", maxRequests: 20, windowSeconds: 86400 },
+    ]) {
+      const attempt = await checkRateLimit(docClient, UpdateCommand, {
+        table: RATE_LIMIT_TABLE,
+        windowSeconds: 3600,
+        ...limit,
+        requestId,
+      });
+      if (!attempt.allowed) {
+        closeWithJson(attempt.remaining < 0 ? 503 : 429, {
+          error: attempt.remaining < 0 ? "temporarily_unavailable" : "rate_limited",
+          message: "Blueprint generation is temporarily unavailable. Please try again later.",
+        });
+        return;
+      }
+    }
+    quota = createBlueprintQuota(docClient, UpdateCommand, {
       table: RATE_LIMIT_TABLE,
-      ip: deviceHash,
-      prefix: "blueprint-",
-      maxRequests: RATE_LIMIT_MAX,
-      windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
-      ttlBuffer: 3600,
+      deviceHash: auth.deviceHash,
       requestId,
     });
-
-    if (!rateLimitResult.allowed) {
+    const reservation = await quota.reserve();
+    if (!reservation.allowed) {
       metrics.record("BlueprintRateLimited");
       logStructured(requestId, "rate_limited", { deviceHash });
-      closeWithJson(429, {
-        error: "rate_limited",
-        message:
-          "You've generated your blueprint for this 30-day window. Join the waitlist for higher-limit Pro access.",
+      closeWithJson(reservation.unavailable ? 503 : 429, {
+        error: reservation.unavailable ? "temporarily_unavailable" : "rate_limited",
+        message: reservation.unavailable
+          ? "We couldn't check your allowance. Please try again later."
+          : "A blueprint is already generating or your allowance for this 30-day window has been used.",
       });
       return;
     }
@@ -279,7 +300,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       error: (/** @type {string} */ code, /** @type {any} */ extra) => logStructured(requestId, code, extra),
     };
 
-    const result = await generateBlueprint(spec, {
+    const result = await generateBlueprint(parsedSpec.data, {
       tier: "free",
       bedrockClient,
       sanityClient,
@@ -331,13 +352,13 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
         type: "error",
         error: result.error,
         message,
-        details: result.details,
         meta: { requestId, latency_ms: totalMs },
       });
       responseStream.end();
       return;
     }
 
+    await quota.commit();
     metrics.record("BlueprintGenerated");
     if (result.meta?.haiku_verdict && result.meta.haiku_verdict.ok === false) {
       metrics.record("BlueprintHaikuFlagged");
@@ -404,6 +425,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       }
     }
   } finally {
+    await quota?.release();
     await metrics.flush();
     await flushSentry();
     await flushProductAnalytics();

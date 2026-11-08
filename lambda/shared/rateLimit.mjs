@@ -1,13 +1,33 @@
 import { createHash } from "crypto";
 import { createLogger } from "./logger.mjs";
 
+/** @param {any} client @param {any} Command @param {{ table: string, service: string, hourly: number, daily: number, requestId: string }} options */
+export async function checkCostBudget(client, Command, { table, service, hourly, daily, requestId }) {
+  for (const [windowSeconds, maxRequests] of [
+    [3600, hourly],
+    [86400, daily],
+  ]) {
+    const result = await checkRateLimit(client, Command, {
+      table,
+      ip: "global",
+      prefix: `${service}-budget-${windowSeconds}-`,
+      maxRequests,
+      windowSeconds,
+      ttlBuffer: 3600,
+      requestId,
+    });
+    if (!result.allowed) return false;
+  }
+  return true;
+}
+
 const fallbackLog = createLogger(null, { service: "rate-limit" });
 
 /**
- * Atomic DynamoDB-based rate limiter with sliding windows.
+ * Atomic DynamoDB-based rate limiter with fixed windows.
  *
  * Uses ADD + ConditionExpression for race-condition-free counting.
- * Fails open on DynamoDB errors (availability > strictness).
+ * Denies requests when storage is unavailable unless a telemetry caller explicitly opts out.
  *
  * @param {any} docClient - Injected DynamoDBDocumentClient (duck-typed: must have .send)
  * @param {any} UpdateCommand - Injected UpdateCommand constructor
@@ -19,12 +39,13 @@ const fallbackLog = createLogger(null, { service: "rate-limit" });
  * @param {number} opts.windowSeconds - Window length in seconds
  * @param {number} [opts.ttlBuffer=300] - Extra seconds before TTL deletes the row
  * @param {string|null} [opts.requestId=null] - If set, errors are logged as structured JSON with this ID
+ * @param {boolean} [opts.failOpen=false]
  * @returns {Promise<{ allowed: boolean, remaining: number }>}
  */
 export async function checkRateLimit(
   docClient,
   UpdateCommand,
-  { table, ip, prefix = "", maxRequests, windowSeconds, ttlBuffer = 300, requestId = null },
+  { table, ip, prefix = "", maxRequests, windowSeconds, ttlBuffer = 300, requestId = null, failOpen = false },
 ) {
   const ipHash = createHash("sha256")
     .update(ip || "unknown")
@@ -33,7 +54,7 @@ export async function checkRateLimit(
   const now = Math.floor(Date.now() / 1000);
   const windowStart = now - (now % windowSeconds);
 
-  try {
+  const increment = async () => {
     const result = await docClient.send(
       new UpdateCommand({
         TableName: table,
@@ -55,9 +76,12 @@ export async function checkRateLimit(
       return { allowed: false, remaining: 0 };
     }
     return { allowed: true, remaining: maxRequests - count };
+  };
+  const unavailable = () => ({ allowed: failOpen, remaining: -1 });
+  try {
+    return await increment();
   } catch (error) {
     const errName = error instanceof Error ? error.name : String(error);
-    // ConditionalCheckFailedException = stale window, safe to reset
     if (errName === "ConditionalCheckFailedException") {
       try {
         await docClient.send(
@@ -65,6 +89,7 @@ export async function checkRateLimit(
             TableName: table,
             Key: { pk },
             UpdateExpression: "SET requestCount = :one, windowStart = :ws, #ttl = :ttl",
+            ConditionExpression: "windowStart < :ws",
             ExpressionAttributeNames: { "#ttl": "ttl" },
             ExpressionAttributeValues: {
               ":one": 1,
@@ -74,8 +99,15 @@ export async function checkRateLimit(
           }),
         );
         return { allowed: true, remaining: maxRequests - 1 };
-      } catch {
-        return { allowed: true, remaining: -1 };
+      } catch (resetError) {
+        if (resetError instanceof Error && resetError.name === "ConditionalCheckFailedException") {
+          try {
+            return await increment();
+          } catch {
+            return unavailable();
+          }
+        }
+        return unavailable();
       }
     }
     if (requestId) {
@@ -84,6 +116,6 @@ export async function checkRateLimit(
     } else {
       fallbackLog.error("rate_limit_error", { error: errName });
     }
-    return { allowed: true, remaining: -1 };
+    return unavailable();
   }
 }

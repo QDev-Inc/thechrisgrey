@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import ResponsiveImage, { type ResponsiveImageSource } from './ResponsiveImage';
 
 const source: ResponsiveImageSource = {
@@ -17,6 +17,14 @@ const source: ResponsiveImageSource = {
 };
 
 describe('ResponsiveImage', () => {
+  it('removes failing modern sources so the browser can load the original fallback', () => {
+    const { container } = render(<ResponsiveImage src={source} alt="A photo" sizes="100vw" />);
+    const image = container.querySelector('img')!;
+    fireEvent.error(image);
+    expect(container.querySelector('source')).toBeNull();
+    expect(image).toHaveAttribute('src', '/img.jpeg');
+  });
+
   it('renders a <picture> with AVIF and WebP sources and a JPEG fallback <img>', () => {
     const { container } = render(<ResponsiveImage src={source} alt="A photo" sizes="100vw" />);
     const picture = container.querySelector('picture');

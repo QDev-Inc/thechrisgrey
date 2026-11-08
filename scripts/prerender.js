@@ -275,7 +275,7 @@ async function crawl() {
   // meta from the SPA shell. It is intentionally NOT in STATIC_ROUTES (so the
   // sitemap and validate-prerender-seo gate do not include it) — it is an app
   // shell, not indexable content.
-  const PRERENDER_ONLY_ROUTES = ['/chat'];
+  const PRERENDER_ONLY_ROUTES = ['/chat', '/newsletter/confirm'];
   const routes = [...STATIC_ROUTES, ...PRERENDER_ONLY_ROUTES, ...blogRoutes];
   console.log(
     `[prerender] Routes to prerender: ${routes.length} (${STATIC_ROUTES.length} static + ${PRERENDER_ONLY_ROUTES.length} app-shell + ${blogRoutes.length} blog)`,

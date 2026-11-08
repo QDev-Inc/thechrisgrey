@@ -1,8 +1,9 @@
-import { lazy, useCallback, useEffect, useState } from 'react';
+import { lazy, useCallback, useState } from 'react';
 import SafeCanvas from '../SafeCanvas';
 import { checkWebGLSupport } from '../../utils/checkWebGL';
 import { isPrerender } from '../../utils/prerender';
 import Icon from '../icons/Icon';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 const AltiMascot = lazy(() => import('./AltiMascot'));
 
@@ -10,12 +11,6 @@ interface ChatWidgetButtonProps {
   isOpen: boolean;
   onClick: () => void;
 }
-
-// Longest the 3D mount waits when requestIdleCallback is unavailable (Safari)
-// or never goes idle. Long enough to clear the LCP window on a slow page, short
-// enough that a visitor who reaches for the launcher unprompted still finds the
-// mascot already there.
-const MASCOT_DEFER_MS = 2500;
 
 const PLATFORM_IDLE: React.CSSProperties = {
   background:
@@ -42,24 +37,8 @@ const MascotFallback = ({ isOpen }: { isOpen: boolean }) => (
 );
 
 const ChatWidgetButton = ({ isOpen, onClick }: ChatWidgetButtonProps) => {
-  // The 3D launcher is the heaviest thing on any page: the R3F/drei chunk, the
-  // shared three-vendor chunk and a 1.15MB GLB, all for a 64px button most
-  // visitors never click. Hold it until the browser goes idle (or until the
-  // visitor actually aims at the launcher, whichever lands first) so none of it
-  // competes with the page's LCP asset on all 15 routes the widget renders on.
-  // MascotFallback holds the identical box until then, so nothing shifts.
   const [readyFor3D, setReadyFor3D] = useState(false);
   const markReady = useCallback(() => setReadyFor3D(true), []);
-
-  useEffect(() => {
-    const idle = typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback : null;
-    if (idle) {
-      const handle = idle(() => setReadyFor3D(true), { timeout: MASCOT_DEFER_MS });
-      return () => window.cancelIdleCallback?.(handle);
-    }
-    const timer = window.setTimeout(() => setReadyFor3D(true), MASCOT_DEFER_MS);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   // A context lost after mount is unrecoverable from React's side: three.js
   // preventDefaults the event and stops rendering, and neither the error
@@ -75,7 +54,9 @@ const ChatWidgetButton = ({ isOpen, onClick }: ChatWidgetButtonProps) => {
   // R3F-init / useGLTF-Suspense throws at mount time.
   // isPrerender() additionally skips the 3D mount during the build-time crawl
   // so the headless render reaches a stable DOM instead of a never-idle loop.
-  const showMascot = readyFor3D && !contextLost && checkWebGLSupport() && !isPrerender();
+  const reducedMotion = useReducedMotion();
+  const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+  const showMascot = !reducedMotion && !saveData && readyFor3D && !contextLost && checkWebGLSupport() && !isPrerender();
 
   // Tooltip text mirrors the aria-label so the visible affordance matches the
   // accessible name (VAL-ENG-010). It is shown on hover AND keyboard focus via
@@ -85,7 +66,7 @@ const ChatWidgetButton = ({ isOpen, onClick }: ChatWidgetButtonProps) => {
   const tooltipText = isOpen ? 'Close chat' : 'Chat with Alti';
 
   return (
-    <span className="group fixed bottom-6 right-6 z-40 inline-flex">
+    <span className="group fixed bottom-[calc(1.5rem+var(--consent-bottom,0px))] right-6 z-40 inline-flex">
       <button
         onClick={onClick}
         onPointerEnter={markReady}

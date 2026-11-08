@@ -15,6 +15,11 @@ process.env.AWS_SHARED_CREDENTIALS_FILE = "/dev/null";
 process.env.AWS_CONFIG_FILE = "/dev/null";
 process.env.AWS_EC2_METADATA_DISABLED = "true";
 process.env.AWS_REGION = "us-east-1";
+const { DynamoDBDocumentClient, UpdateCommand } = await import("@aws-sdk/lib-dynamodb");
+DynamoDBDocumentClient.prototype.send = async function (command) {
+  if (command instanceof UpdateCommand) return { Attributes: { requestCount: 1 } };
+  throw new Error("memory unavailable in this test");
+};
 
 // Both auth paths must be ACTIVE for these assertions: legacy HMAC (CHAT_SIGNING_KEY)
 // and server-issued session tokens (SESSION_TOKEN_KEY).

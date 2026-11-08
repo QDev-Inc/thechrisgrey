@@ -11,7 +11,9 @@ import {
 import { CloudWatchClient } from "@aws-sdk/client-cloudwatch";
 import { createClient as createSanityClient } from "@sanity/client";
 import { randomUUID, timingSafeEqual } from "crypto";
-import { checkRateLimit } from "lambda-shared/rateLimit";
+import { checkRateLimit, checkCostBudget } from "lambda-shared/rateLimit";
+import { createInferenceClient } from "lambda-shared/inference";
+import { createKnowledgeClient } from "lambda-shared/knowledge";
 import { validateDeviceId, hashDeviceId } from "lambda-shared/deviceId";
 
 import { authenticateRequest } from "lambda-shared/requestAuth";
@@ -23,6 +25,8 @@ import { validateInput, validatePageContext, getLatestUserMessage } from "./vali
 import { buildSystemPrompt } from "./prompts.mjs";
 import { retrieveContext } from "./kbRetrieve.mjs";
 import { buildBedrockModel, buildAgent, streamAgentResponse } from "./agent.mjs";
+import { CloudflareModel } from "./cloudflareModel.mjs";
+import { createPodcastKnowledgeClient, requiresPodcastSearch } from "./podcastKnowledge.mjs";
 import { buildTools } from "./tools/index.mjs";
 import { getFacts, forgetDevice } from "./memory.mjs";
 import { emitEvent, EVENT_KINDS } from "./events.mjs";
@@ -34,8 +38,10 @@ import { detectGenUiIntent, renderGenUi } from "./genUi.mjs";
 // function, not a code edit and redeploy.
 const REGION = process.env.AWS_REGION || "us-east-1";
 
-const agentClient = new BedrockAgentRuntimeClient({ region: REGION });
-const bedrockRuntimeClient = new BedrockRuntimeClient({ region: REGION });
+const agentClient = createPodcastKnowledgeClient(
+  createKnowledgeClient(new BedrockAgentRuntimeClient({ region: REGION })),
+);
+const bedrockRuntimeClient = createInferenceClient(new BedrockRuntimeClient({ region: REGION }), ApplyGuardrailCommand);
 const dynamoClient = new DynamoDBClient({ region: REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const cloudwatchClient = new CloudWatchClient({ region: REGION });
@@ -323,7 +329,9 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
 
     let body;
     try {
+      if (Buffer.byteLength(event.body || "{}", "utf8") > 65536) throw new Error("request_too_large");
       body = JSON.parse(event.body || "{}");
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid_body");
     } catch {
       metrics.record("MalformedRequest");
       log.error("malformed_json");
@@ -363,6 +371,23 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       metrics.record("InvalidLatestMessage");
       outcome = "invalid_input";
       writeSystemMessage(responseStream, "Please send a message to start our conversation.");
+      return;
+    }
+
+    const withinBudget = await checkCostBudget(docClient, UpdateCommand, {
+      table: RATE_LIMIT_TABLE,
+      service: "chat",
+      hourly: 500,
+      daily: 2000,
+      requestId,
+    });
+    if (!withinBudget) {
+      metrics.record("CostBudgetRejection");
+      outcome = "rate_limited";
+      writeSystemMessage(
+        responseStream,
+        "Alti has reached today's shared usage limit. Please try again later or use the contact page.",
+      );
       return;
     }
 
@@ -551,14 +576,23 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       requestId,
     });
 
-    const model = buildBedrockModel({
+    const modelOptions = {
       modelId: MODEL_ID,
       region: REGION,
       guardrailId: GUARDRAIL_ID,
       guardrailVersion: GUARDRAIL_VERSION,
       maxTokens: 500,
       temperature: 0.6,
-    });
+    };
+    const model =
+      bedrockRuntimeClient.provider === "cloudflare"
+        ? new CloudflareModel({
+            ...modelOptions,
+            client: bedrockRuntimeClient,
+            initialToolName:
+              PODCAST_KNOWLEDGE_BASE_ID && requiresPodcastSearch(latestQuery) ? "search_podcast" : undefined,
+          })
+        : buildBedrockModel(modelOptions);
 
     const agent = buildAgent({
       model,

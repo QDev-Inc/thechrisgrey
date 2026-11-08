@@ -113,7 +113,7 @@ test("exceeding the per-IP issuance limit is rejected with 429", async () => {
   assert.equal(res.statusCode, 429);
 });
 
-test("happy path mints scoped chat + blueprint tokens bound to the device hash", async () => {
+test("happy path mints independently scoped chat, blueprint, and MCP tokens", async () => {
   const res = await makeHandler()(makeEvent({ body: { deviceId: DEVICE_ID, turnstileToken: "good" } }));
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.body);
@@ -128,11 +128,16 @@ test("happy path mints scoped chat + blueprint tokens bound to the device hash",
   assert.equal(bp.valid, true);
   assert.equal(bp.deviceHash, deviceHashOf(DEVICE_ID));
 
+  const mcp = verifySessionToken(body.mcpToken, SIGNING_KEY, { scope: "mcp" });
+  assert.equal(mcp.valid, true);
+  assert.equal(mcp.deviceHash, deviceHashOf(DEVICE_ID));
+  assert.equal(verifySessionToken(body.mcpToken, SIGNING_KEY, { scope: "chat" }).valid, false);
+
   // A chat token must NOT be accepted on the blueprint scope and vice versa.
   assert.equal(verifySessionToken(body.chatToken, SIGNING_KEY, { scope: "blueprint" }).valid, false);
 });
 
-test("when TURNSTILE_SECRET is empty, the Turnstile check is skipped (dev parity)", async () => {
+test("missing TURNSTILE_SECRET fails closed", async () => {
   const handler = createIssuerHandler({
     docClient: fakeDocClient(1),
     UpdateCommand: FakeUpdateCommand,
@@ -141,13 +146,16 @@ test("when TURNSTILE_SECRET is empty, the Turnstile check is skipped (dev parity
     config: baseConfig({ turnstileSecret: "" }),
   });
   const res = await handler(makeEvent({ body: { deviceId: DEVICE_ID } }));
-  assert.equal(res.statusCode, 200);
+  assert.equal(res.statusCode, 503);
 });
 
 // ── verifyTurnstile (real implementation, injected fetch) ───────────────────
 
 test("verifyTurnstile returns true when siteverify reports success", async () => {
-  const fakeFetch = async () => ({ json: async () => ({ success: true }) });
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({ success: true, hostname: "thechrisgrey.com", action: "session" }),
+  });
   assert.equal(await verifyTurnstile("token", "secret", "1.2.3.4", fakeFetch), true);
 });
 
@@ -161,4 +169,26 @@ test("verifyTurnstile fails closed when the network call throws", async () => {
     throw new Error("network down");
   };
   assert.equal(await verifyTurnstile("token", "secret", "1.2.3.4", fakeFetch), false);
+});
+
+for (const invalidResult of [
+  { success: true, hostname: "attacker.example", action: "session" },
+  { success: true, hostname: "thechrisgrey.com", action: "contact" },
+]) {
+  test(`rejects Turnstile context ${JSON.stringify(invalidResult)}`, async () => {
+    const fakeFetch = async () => ({ ok: true, json: async () => invalidResult });
+    assert.equal(await verifyTurnstile("token", "secret", "1.2.3.4", fakeFetch), false);
+  });
+}
+
+test("a local Turnstile bypass cannot disable verification in Lambda", async () => {
+  process.env.ALLOW_LOCAL_TURNSTILE_BYPASS = "true";
+  process.env.AWS_LAMBDA_FUNCTION_NAME = "issuer";
+  try {
+    const handler = makeHandler({ config: { turnstileSecret: "" } });
+    assert.equal((await handler(makeEvent({ body: { deviceId: DEVICE_ID } }))).statusCode, 503);
+  } finally {
+    delete process.env.ALLOW_LOCAL_TURNSTILE_BYPASS;
+    delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+  }
 });

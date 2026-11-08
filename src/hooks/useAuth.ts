@@ -3,6 +3,10 @@ import {
   CognitoIdentityProviderClient,
   InitiateAuthCommand,
   GlobalSignOutCommand,
+  RespondToAuthChallengeCommand,
+  AssociateSoftwareTokenCommand,
+  VerifySoftwareTokenCommand,
+  type InitiateAuthCommandOutput,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 const cognitoClient = new CognitoIdentityProviderClient({
@@ -26,7 +30,15 @@ interface AuthState {
   error: string | null;
 }
 
+export interface AuthChallenge {
+  name: 'SOFTWARE_TOKEN_MFA' | 'MFA_SETUP' | 'NEW_PASSWORD_REQUIRED';
+  session: string;
+  username: string;
+  secret?: string;
+}
+
 export function useAuth() {
+  const [challenge, setChallenge] = useState<AuthChallenge | null>(null);
   // Lazy initializer runs once on mount. sessionStorage is synchronous, so we
   // can resolve the auth state during the first render — no need for a mount
   // useEffect that flips isLoading after the fact (which would also trip
@@ -47,45 +59,105 @@ export function useAuth() {
     return { isAuthenticated: false, isLoading: false, error: null };
   });
 
-  const login = useCallback(async (email: string, password: string) => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-    try {
-      const command = new InitiateAuthCommand({
-        AuthFlow: 'USER_PASSWORD_AUTH',
-        ClientId: CLIENT_ID,
-        AuthParameters: {
-          USERNAME: email,
-          PASSWORD: password,
-        },
-      });
-
-      const response = await cognitoClient.send(command);
-      const result = response.AuthenticationResult;
-
-      if (!result?.AccessToken || !result?.IdToken) {
-        throw new Error('Authentication failed');
-      }
-
+  const completeAuth = useCallback(async (response: InitiateAuthCommandOutput, username: string) => {
+    const result = response.AuthenticationResult;
+    if (result?.AccessToken && result.IdToken) {
       const tokens: AuthTokens = {
         accessToken: result.AccessToken,
         idToken: result.IdToken,
         refreshToken: result.RefreshToken || '',
         expiresAt: Date.now() + (result.ExpiresIn || 3600) * 1000,
       };
-
       sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(tokens));
+      setChallenge(null);
       setState({ isAuthenticated: true, isLoading: false, error: null });
-    } catch (error) {
-      const message =
-        error instanceof Error && error.name === 'NotAuthorizedException'
-          ? 'Invalid email or password'
-          : 'Authentication failed. Please try again.';
-      setState({ isAuthenticated: false, isLoading: false, error: message });
+      return;
     }
+    const name = response.ChallengeName;
+    if (
+      !response.Session ||
+      (name !== 'SOFTWARE_TOKEN_MFA' && name !== 'MFA_SETUP' && name !== 'NEW_PASSWORD_REQUIRED')
+    ) {
+      throw new Error('Unsupported authentication response');
+    }
+    let session = response.Session;
+    let secret: string | undefined;
+    if (name === 'MFA_SETUP') {
+      const setup = await cognitoClient.send(new AssociateSoftwareTokenCommand({ Session: session }));
+      if (!setup.Session || !setup.SecretCode) throw new Error('Authenticator setup failed');
+      session = setup.Session;
+      secret = setup.SecretCode;
+    }
+    setChallenge({ name, session, username: response.ChallengeParameters?.USER_ID_FOR_SRP || username, secret });
+    setState({ isAuthenticated: false, isLoading: false, error: null });
   }, []);
 
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setChallenge(null);
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+      try {
+        const command = new InitiateAuthCommand({
+          AuthFlow: 'USER_PASSWORD_AUTH',
+          ClientId: CLIENT_ID,
+          AuthParameters: {
+            USERNAME: email,
+            PASSWORD: password,
+          },
+        });
+
+        const response = await cognitoClient.send(command);
+        await completeAuth(response, email);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.name === 'NotAuthorizedException'
+            ? 'Invalid email or password'
+            : 'Authentication failed. Please try again.';
+        setState({ isAuthenticated: false, isLoading: false, error: message });
+      }
+    },
+    [completeAuth],
+  );
+
+  const respondToChallenge = useCallback(
+    async (value: string) => {
+      if (!challenge) return;
+      setState((previous) => ({ ...previous, isLoading: true, error: null }));
+      try {
+        let session = challenge.session;
+        const responses: Record<string, string> = { USERNAME: challenge.username };
+        if (challenge.name === 'MFA_SETUP') {
+          const verified = await cognitoClient.send(
+            new VerifySoftwareTokenCommand({ Session: session, UserCode: value.trim() }),
+          );
+          if (verified.Status !== 'SUCCESS' || !verified.Session) throw new Error('Invalid code');
+          session = verified.Session;
+        } else {
+          responses[challenge.name === 'NEW_PASSWORD_REQUIRED' ? 'NEW_PASSWORD' : 'SOFTWARE_TOKEN_MFA_CODE'] = value;
+        }
+        const response = await cognitoClient.send(
+          new RespondToAuthChallengeCommand({
+            ClientId: CLIENT_ID,
+            ChallengeName: challenge.name,
+            Session: session,
+            ChallengeResponses: responses,
+          }),
+        );
+        await completeAuth(response, challenge.username);
+      } catch {
+        setState({
+          isAuthenticated: false,
+          isLoading: false,
+          error: 'Verification failed. Check your entry and try again, or restart sign-in.',
+        });
+      }
+    },
+    [challenge, completeAuth],
+  );
+
   const logout = useCallback(async () => {
+    setChallenge(null);
     const stored = sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (stored) {
       try {
@@ -157,6 +229,8 @@ export function useAuth() {
     isAuthenticated: state.isAuthenticated,
     isLoading: state.isLoading,
     error: state.error,
+    challenge,
+    respondToChallenge,
     login,
     logout,
     getAccessToken,

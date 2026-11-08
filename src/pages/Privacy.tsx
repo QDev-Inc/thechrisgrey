@@ -18,7 +18,7 @@ const breadcrumbs = [
 ];
 
 const Privacy = () => {
-  const lastUpdated = 'June 14, 2026';
+  const lastUpdated = 'November 7, 2026';
 
   // The reset control is only meaningful once the visitor has actually opted in
   // to PostHog. Computed once at mount (lazy initializer, no effect). isPrerender()
@@ -210,7 +210,7 @@ const Privacy = () => {
                   </span>
                   <span>
                     <strong className="text-white">Amazon Web Services (AWS):</strong> Cloud hosting, serverless
-                    functions, and AI processing via Amazon Bedrock.
+                    functions, and AI processing and safety checks via Amazon Bedrock.
                   </span>
                 </li>
                 <li className="flex items-start">
@@ -234,8 +234,9 @@ const Privacy = () => {
                     •
                   </span>
                   <span>
-                    <strong className="text-white">Cloudflare:</strong> DNS, security, and privacy-friendly web
-                    analytics.
+                    <strong className="text-white">Cloudflare:</strong> DNS, bot protection, and AI processing through
+                    Workers AI. Chat messages and relevant conversation context may be sent to Cloudflare to generate
+                    responses using the configured model.
                   </span>
                 </li>
               </ul>
@@ -255,18 +256,15 @@ const Privacy = () => {
                 trackers or sell your data to advertisers.
               </p>
               <p className="text-altivum-silver" style={typography.bodyText}>
-                We use <strong className="text-white">Cloudflare Web Analytics</strong> and{' '}
-                <strong className="text-white">Plausible</strong> to understand how visitors use our Site. These
-                services are privacy-friendly: they do not use cookies, do not track individual users across sites, and
-                do not collect personal information &mdash; only aggregate data such as page views, visitor counts, and
-                referral sources.
+                Performance measurements are sent to our AWS monitoring service. They contain timing data and page
+                paths, not message content. Optional error reports are sent to Sentry only with analytics consent.
+                Session recording is disabled.
               </p>
               <p className="text-altivum-silver mt-4" style={typography.bodyText}>
-                With your consent, we additionally use <strong className="text-white">PostHog</strong> for product
-                analytics and session insights that help us improve the Site. PostHog uses cookies and is enabled{' '}
-                <em>only</em> if you accept it on the consent banner &mdash; declining keeps the Site completely
-                cookie-free. Form fields you enter (such as your email) are never recorded. You can withdraw your
-                consent at any time.
+                With your consent, we use <strong className="text-white">PostHog</strong> for product analytics that
+                help us improve the Site. PostHog uses cookies and is enabled <em>only</em> if you accept it on the
+                consent banner &mdash; declining disables optional analytics cookies. Form fields you enter (such as
+                your email) are never recorded. You can withdraw your consent at any time.
               </p>
               {showResetPreference && (
                 <button
@@ -286,6 +284,11 @@ const Privacy = () => {
                 Data Retention
               </h2>
               <ul className="text-altivum-silver space-y-2" style={typography.bodyText}>
+                <li>
+                  Pending newsletter confirmations expire after 24 hours and are queued for automatic deletion.
+                  Newsletter and Blueprint waitlist consent are stored separately. A confirmation link is required
+                  before either subscription becomes active.
+                </li>
                 <li className="flex items-start">
                   <span className="text-altivum-gold mr-3" aria-hidden="true">
                     •

@@ -4,6 +4,23 @@ Description: >-
   foundation stack's private artifact bucket.
 
 Parameters:
+  AiProvider:
+    Type: String
+    Default: bedrock
+    AllowedValues: [bedrock, cloudflare]
+  KnowledgeSource:
+    Type: String
+    Default: bedrock
+    AllowedValues: [bedrock, sanity]
+  InferenceGatewayUrl:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^https://[a-z0-9.-]+\.workers\.dev/v1/chat/completions$'
+  InferenceGatewayKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    AllowedPattern: '^$|^[a-f0-9]{64}$'
   ArtifactVersion:
     Type: String
     Description: Immutable artifact prefix uploaded by deploy-personal-account.sh.
@@ -52,6 +69,9 @@ Parameters:
   ResendNewsletterSegmentId:
     Type: String
     Default: ''
+  ResendBlueprintSegmentId:
+    Type: String
+    Default: ''
 
 Conditions:
   HasResendSecret: !Not [!Equals [!Ref ResendSecretArn, '']]
@@ -85,7 +105,13 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
-                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-6-v1'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/anthropic.claude-opus-4-6-v1'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/anthropic.claude-opus-4-6-v1'
               - Effect: Allow
                 Action: [dynamodb:Query, dynamodb:PutItem, dynamodb:BatchWriteItem]
                 Resource:
@@ -117,7 +143,16 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, bedrock:ApplyGuardrail]
-                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:*:*'
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:*'
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/anthropic.claude-opus-4-6-v1'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/anthropic.claude-opus-4-6-v1'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/anthropic.claude-opus-4-6-v1'
               - Effect: Allow
                 Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
                 Resource:
@@ -232,7 +267,10 @@ Resources:
                 Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:*'
               - Effect: Allow
                 Action: bedrock:InvokeModel
-                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/*'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
               - Effect: Allow
                 Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
                 Resource:
@@ -262,6 +300,13 @@ Resources:
                 Action: dynamodb:UpdateItem
                 Resource:
                   - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
+
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: TheChrisGrey/SessionToken
 
   ContactEmailRole:
     Type: AWS::IAM::Role
@@ -309,6 +354,10 @@ Resources:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:UpdateItem]
+                Resource:
+                  - Fn::ImportValue: thechrisgrey-foundation-NewsletterConfirmationTableArn
+              - Effect: Allow
                 Action: dynamodb:UpdateItem
                 Resource:
                   - Fn::ImportValue: thechrisgrey-foundation-RateLimitTableArn
@@ -345,11 +394,15 @@ Resources:
             Fn::ImportValue: thechrisgrey-foundation-MainKnowledgeBaseId
           PODCAST_KB_ID:
             Fn::ImportValue: thechrisgrey-foundation-PodcastKnowledgeBaseId
+          KNOWLEDGE_SOURCE: !Ref KnowledgeSource
           GUARDRAIL_ID:
             Fn::ImportValue: thechrisgrey-foundation-GuardrailId
           GUARDRAIL_VERSION:
             Fn::ImportValue: thechrisgrey-foundation-GuardrailVersion
           BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
+          AI_PROVIDER: !Ref AiProvider
+          CLOUDFLARE_AI_GATEWAY_URL: !Ref InferenceGatewayUrl
+          CLOUDFLARE_AI_GATEWAY_KEY: !Ref InferenceGatewayKey
           SANITY_PROJECT_ID: k5950b3w
           SANITY_DATASET: production
           SANITY_READ_TOKEN: !Ref SanityReadToken
@@ -362,7 +415,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt BlueprintRole.Arn
       MemorySize: 1024
-      Timeout: 60
+      Timeout: 100
       Code:
         S3Bucket:
           Fn::ImportValue: thechrisgrey-foundation-ArtifactBucketName
@@ -379,6 +432,9 @@ Resources:
           GUARDRAIL_VERSION:
             Fn::ImportValue: thechrisgrey-foundation-GuardrailVersion
           BEDROCK_OPUS_MODEL_ID: us.anthropic.claude-opus-4-6-v1
+          AI_PROVIDER: !Ref AiProvider
+          CLOUDFLARE_AI_GATEWAY_URL: !Ref InferenceGatewayUrl
+          CLOUDFLARE_AI_GATEWAY_KEY: !Ref InferenceGatewayKey
           BEDROCK_HAIKU_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
           SANITY_PROJECT_ID: k5950b3w
           SANITY_DATASET: production
@@ -401,6 +457,8 @@ Resources:
         Variables:
           COGNITO_USER_POOL_ID:
             Fn::ImportValue: thechrisgrey-foundation-AdminUserPoolId
+          COGNITO_CLIENT_ID:
+            Fn::ImportValue: thechrisgrey-foundation-AdminUserPoolClientId
           S3_BUCKET:
             Fn::ImportValue: thechrisgrey-foundation-KnowledgeBaseSourceBucketName
           KB_SOURCE_KEY: content/knowledge-base.txt
@@ -446,6 +504,8 @@ Resources:
         Variables:
           COGNITO_USER_POOL_ID:
             Fn::ImportValue: thechrisgrey-foundation-AdminUserPoolId
+          COGNITO_CLIENT_ID:
+            Fn::ImportValue: thechrisgrey-foundation-AdminUserPoolClientId
           ADMIN_ALLOWLIST: !Ref AdminAllowlist
           CHAT_RATE_LIMIT_TABLE:
             Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
@@ -467,6 +527,7 @@ Resources:
         Variables:
           CORS_ORIGIN: !Ref CorsOrigin
           MCP_CORS_ORIGIN: !Ref CorsOrigin
+          KNOWLEDGE_SOURCE: !Ref KnowledgeSource
           CHAT_RATE_LIMIT_TABLE:
             Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
           KB_ID:
@@ -476,6 +537,9 @@ Resources:
           GUARDRAIL_VERSION:
             Fn::ImportValue: thechrisgrey-foundation-GuardrailVersion
           BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
+          AI_PROVIDER: !Ref AiProvider
+          CLOUDFLARE_AI_GATEWAY_URL: !Ref InferenceGatewayUrl
+          CLOUDFLARE_AI_GATEWAY_KEY: !Ref InferenceGatewayKey
           SESSION_TOKEN_KEY: !Ref SessionTokenKey
           SANITY_PROJECT_ID: k5950b3w
           SANITY_DATASET: production
@@ -545,6 +609,10 @@ Resources:
             Fn::ImportValue: thechrisgrey-foundation-RateLimitTableName
           RESEND_API_KEY_SECRET_ARN: !Ref ResendSecretArn
           RESEND_NEWSLETTER_SEGMENT_ID: !Ref ResendNewsletterSegmentId
+          RESEND_BLUEPRINT_SEGMENT_ID: !Ref ResendBlueprintSegmentId
+          RESEND_FROM_EMAIL: !Ref ResendFromEmail
+          NEWSLETTER_CONFIRMATION_TABLE:
+            Fn::ImportValue: thechrisgrey-foundation-NewsletterConfirmationTableName
 
   ChatStreamLogGroup:
     Type: AWS::Logs::LogGroup

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { typography } from '../utils/typography';
 import { getConsent, setConsent } from '../utils/consent';
 import { isPostHogConfigured, enablePostHog } from '../utils/posthog';
@@ -20,6 +20,24 @@ const ConsentBanner = () => {
   // localStorage access so the banner never serializes into prerendered HTML.
   const [visible, setVisible] = useState(() => !isPrerender() && isPostHogConfigured() && getConsent() === null);
 
+  const bannerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const update = () => {
+      const offset = window.innerWidth < 640 ? (bannerRef.current?.getBoundingClientRect().height || 0) + 24 : 0;
+      document.documentElement.style.setProperty('--consent-bottom', `${offset}px`);
+    };
+    update();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    if (bannerRef.current) observer?.observe(bannerRef.current);
+    window.addEventListener('resize', update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', update);
+      document.documentElement.style.removeProperty('--consent-bottom');
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   const accept = () => {
@@ -40,16 +58,16 @@ const ConsentBanner = () => {
 
   return (
     <div
+      ref={bannerRef}
       role="region"
       aria-label="Analytics consent"
-      className="fixed bottom-3 left-3 right-3 sm:right-auto sm:max-w-sm z-[60] animate-fade-in rounded-lg border border-altivum-gold/20 bg-altivum-navy/95 backdrop-blur-sm p-5 shadow-[0_8px_40px_rgba(0,0,0,0.45)]"
+      className="fixed bottom-3 left-3 right-3 sm:right-auto sm:max-w-sm z-[60] rounded-lg border border-altivum-gold/20 bg-altivum-navy p-5 shadow-[0_8px_40px_rgba(0,0,0,0.45)]"
     >
       <div className="inline-block px-3 py-0.5 bg-altivum-gold/10 border border-altivum-gold/20 rounded-full mb-3">
         <span className="text-altivum-gold text-[11px] uppercase tracking-widest font-medium">Analytics</span>
       </div>
       <p className="text-altivum-silver mb-4" style={typography.smallText}>
-        I use privacy-respecting analytics to understand what&rsquo;s helpful and improve the site. Form fields are
-        never recorded. Okay to turn it on?{' '}
+        Allow optional analytics to help improve the site? Message content and form fields are never recorded.{' '}
         <ViewTransitionLink to="/privacy" className="text-altivum-gold/90 hover:text-altivum-gold underline">
           Privacy policy
         </ViewTransitionLink>

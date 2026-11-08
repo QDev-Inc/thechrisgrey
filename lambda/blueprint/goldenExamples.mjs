@@ -21,7 +21,7 @@ export const NEGATIVE_CACHE_TTL_MS = 30 * 1000;
 
 // GROQ: all active architectureBlueprint docs, ordered by sortOrder ascending.
 // The engine selects from this list by category at request time.
-export const GOLDEN_EXAMPLES_QUERY = `*[_type == "architectureBlueprint" && isActive == true] | order(sortOrder asc) {
+export const GOLDEN_EXAMPLES_QUERY = `*[_type == "architectureBlueprint" && isActive == true && !(_id in path("drafts.**"))] | order(sortOrder asc)[0...50] {
   _id, title, "slug": slug.current, category, spec, output, notes, isActive, sortOrder
 }`;
 

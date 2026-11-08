@@ -32,37 +32,6 @@
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:site" content="@thechrisgrey" />
 
-    <!-- Preconnect & DNS Prefetch for Performance.
-         Only origins actually requested in the first ~10 seconds of a typical
-         visit are preconnected (VAL-PERF-008). The Google Fonts Material Icons
-         preconnects were removed when icons moved to inline SVG
-         (VAL-PERF-006/007). Lambda Function URLs used only on form submission
-         or admin auth are NOT preconnected (they are not first-10s origins).
-
-         The preconnects listed here are GLOBAL — origins every page requests
-         within 10s (the analytics beacons loaded by the scripts below). Origins
-         used only on specific routes are NOT here; they are injected per-route
-         by the SEO component (src/components/SEO.tsx) from src/routes.ts
-         `preconnects` metadata so each prerendered page preconnects to exactly
-         the origins it uses:
-           - cdn.sanity.io (Sanity CDN images) -> /blog, /podcast, /blog/:slug
-           - i.ytimg.com (YouTube thumbnails) -> /podcast + blog posts that
-             embed a YouTube facade (injected by YouTubeFacade itself)
-         The following origins were removed entirely (dead preconnects — no
-         page requests them within 10s): dataplane.rum.us-east-1.amazonaws.com,
-         cognito-idp.us-east-1.amazonaws.com, www.buzzsprout.com. -->
-    <!-- Plausible Analytics script origin (loaded on every page below). -->
-    <link rel="preconnect" href="https://plausible.io" crossorigin />
-    <!-- Cloudflare Web Analytics beacon origin (loaded on every page below). -->
-    <link rel="preconnect" href="https://static.cloudflareinsights.com" crossorigin />
-    <!-- PostHog product analytics (consent-gated; preconnecting early speeds
-         up the first event after the visitor accepts the banner). The host is
-         configurable via VITE_POSTHOG_HOST and defaults to us.i.posthog.com. -->
-    <link rel="preconnect" href="https://us.i.posthog.com" crossorigin />
-    <link rel="dns-prefetch" href="https://altivum.ai" />
-    <link rel="dns-prefetch" href="https://vector.altivum.ai" />
-    <link rel="dns-prefetch" href="https://logic.altivum.ai" />
-
     <!-- RSS Feed -->
     <link
       rel="alternate"
@@ -77,38 +46,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-
-    <!-- Cloudflare Web Analytics.
-         Cloudflare's beacon.min.js is served from an unversioned URL that
-         Cloudflare updates globally (ETag rotates with each release), so it
-         has no stable hash to pin via SRI. It is mitigated by the CSP
-         script-src allowlist (customHttp.yml) which restricts execution to
-         static.cloudflareinsights.com. `defer` keeps it off the critical
-         render path (VAL-PERF-012). -->
-    <script
-      defer
-      src="https://static.cloudflareinsights.com/beacon.min.js"
-      data-cf-beacon='{"token": "********************************"}'
-    ></script>
-
-    <!-- Plausible Analytics (privacy-friendly, no cookies).
-         The filename is hash-derived and stable per-site, so an SRI hash is
-         pinned (VAL-PERF-014): if the CDN is compromised and the bytes
-         change, the browser refuses to execute the tampered script.
-         `async` keeps it non-render-blocking; `crossorigin="anonymous"` is
-         required for the integrity check (Plausible serves
-         Access-Control-Allow-Origin: *). `defer` is unnecessary alongside
-         `async` (async wins for an external script). -->
-    <script
-      async
-      integrity="sha384-q9y5VkohSxIzDbobAXX3qmh75XQ5YEiK6z9XTygIc78qrxOAFCl9ruJYtQ7eQHCQ"
-      crossorigin="anonymous"
-      src="https://plausible.io/js/pa-bQzxzh5KzDB8jWsj-fPb8.js"
-    ></script>
-    <!-- plausible-init.js sets up the stub queue before the analytics script
-         loads. `defer` keeps it off the critical render path (VAL-PERF-012);
-         it executes after parse but before DOMContentLoaded, in order before
-         the deferred Cloudflare beacon. -->
-    <script defer src="/plausible-init.js"></script>
   </body>
 </html>

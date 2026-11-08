@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: thechrisgrey Newsletter Subscription API
   version: 1.0.0
-  description: Turnstile-protected newsletter subscriptions through Resend Contacts.
+  description: Turnstile-protected confirmation requests. Contacts are activated only after a single-use mailbox confirmation.
 paths:
   /:
     get:
@@ -15,20 +15,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
     post:
-      summary: Subscribe an email address
+      summary: Request confirmation or confirm a subscription
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SubscriptionRequest'
+              oneOf:
+                - $ref: '#/components/schemas/SubscriptionRequest'
+                - $ref: '#/components/schemas/ConfirmationRequest'
       responses:
-        '201':
-          description: The address was added or reactivated in Resend.
+        '202':
+          description: Confirmation email requested; the contact has not been subscribed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AcceptedResponse'
+        '200':
+          description: Mailbox ownership confirmed and the requested subscription activated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedResponse'
+        '503':
+          description: Required service configuration is unavailable.
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '403':
@@ -61,10 +71,20 @@ components:
           maxLength: 254
         source:
           type: string
-          description: Optional UI attribution. It is not persisted by this service.
+          enum: [newsletter, blueprint]
+          default: newsletter
+          description: Subscription purpose, retained through confirmation and mapped to a dedicated segment.
         turnstileToken:
           type: string
           description: One-time Cloudflare Turnstile token, required when Turnstile is configured.
+    ConfirmationRequest:
+      type: object
+      required: [confirmationToken]
+      properties:
+        confirmationToken:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: Single-use token sent to the subscriber, valid for 24 hours.
     AcceptedResponse:
       type: object
       required: [ok]

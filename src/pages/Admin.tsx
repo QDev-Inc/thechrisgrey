@@ -8,8 +8,7 @@ import { AdminLogin, EntryForm, EntryList, SiteHealthPanel } from '../components
 import Icon from '../components/icons/Icon';
 
 // Main admin dashboard
-function AdminDashboard() {
-  const { logout, getAccessToken } = useAuth();
+function AdminDashboard({ logout, getAccessToken }: Pick<ReturnType<typeof useAuth>, 'logout' | 'getAccessToken'>) {
   const { entries, isLoading, isPublishing, error, fetchEntries, createEntry, updateEntry, deleteEntry, publish } =
     useKbAdmin(getAccessToken);
 
@@ -167,7 +166,7 @@ function AdminDashboard() {
 
 // Main export — switches between login and dashboard
 const Admin = () => {
-  const { isAuthenticated, isLoading, error, login } = useAuth();
+  const { isAuthenticated, isLoading, error, login, logout, getAccessToken, challenge, respondToChallenge } = useAuth();
 
   // /admin is Cognito-gated and excluded from the sitemap/prerender, but the
   // route's `noIndex` flag (routes.ts) only drives that build-time exclusion — it
@@ -187,9 +186,16 @@ const Admin = () => {
           <div className="w-8 h-8 border-2 border-altivum-gold/30 border-t-altivum-gold rounded-full animate-spin" />
         </div>
       ) : !isAuthenticated ? (
-        <AdminLogin onLogin={login} isLoading={isLoading} error={error} />
+        <AdminLogin
+          onLogin={login}
+          isLoading={isLoading}
+          error={error}
+          challenge={challenge}
+          onChallenge={respondToChallenge}
+          onRestart={logout}
+        />
       ) : (
-        <AdminDashboard />
+        <AdminDashboard logout={logout} getAccessToken={getAccessToken} />
       )}
     </>
   );

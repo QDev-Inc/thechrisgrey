@@ -21,6 +21,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { accessToken, configureCognito, SUBJECT } from "../../shared/__fixtures__/cognito.mjs";
+configureCognito((await import("lambda-shared/auth")).getCognitoVerifier);
+const adminToken = accessToken();
 
 // ── Isolate from AWS BEFORE importing the handler ──────────────────────────
 delete process.env.AWS_ACCESS_KEY_ID;
@@ -65,6 +68,7 @@ CognitoIdentityProviderClient.prototype.send = async function cognitoStub() {
   return {
     Username: "admin",
     UserAttributes: [
+      { Name: "sub", Value: SUBJECT },
       { Name: "email", Value: "admin@altivum.ai" },
       { Name: "email_verified", Value: "true" },
     ],
@@ -113,6 +117,8 @@ test("POST /vitals with valid LCP data returns 200 and publishes CloudWatch metr
   assert.equal(putCmds[0].input.Namespace, "TheChrisGrey/SiteMetrics");
   assert.equal(putCmds[0].input.MetricData[0].MetricName, "LCP");
   assert.equal(putCmds[0].input.MetricData[0].Value, 1200);
+  assert.equal(putCmds[0].input.MetricData[1].Value, 1200);
+  assert.equal(putCmds[0].input.MetricData[1].Dimensions, undefined);
   assert.deepEqual(putCmds[0].input.MetricData[0].Dimensions, [{ Name: "Rating", Value: "good" }]);
 });
 
@@ -255,7 +261,7 @@ test("GET /health with valid Cognito token returns 200 with aggregated health da
       makeEvent({
         method: "GET",
         path: "/health",
-        headers: { authorization: "Bearer valid-token" },
+        headers: { authorization: `Bearer ${adminToken}` },
       }),
     );
     assert.equal(res.statusCode, 200);

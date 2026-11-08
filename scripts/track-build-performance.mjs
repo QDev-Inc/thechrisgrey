@@ -32,7 +32,7 @@ const STEPS = [
   { name: 'generate-podcast-episodes', command: 'node scripts/generate-podcast-episodes.js' },
   { name: 'lint', command: 'npm run lint' },
   { name: 'tsc', command: 'tsc' },
-  { name: 'vite-build', command: 'vite build' },
+  { name: 'vite-build', command: 'vite build && node scripts/check-critical-images.mjs' },
   { name: 'generate-og-images', command: 'node scripts/generate-og-images.mjs' },
   { name: 'prerender', command: 'node scripts/prerender.js' },
   { name: 'validate-prerender-seo', command: 'node scripts/validate-prerender-seo.mjs' },

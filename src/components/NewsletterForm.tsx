@@ -54,7 +54,7 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      const turnstileToken = await getTurnstileToken();
+      const turnstileToken = await getTurnstileToken('newsletter');
       const controller = new AbortController();
       timeoutId = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(
@@ -72,13 +72,13 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
         }),
       );
 
-      const result = await response.json();
+      await response.json();
 
       if (response.ok) {
         setSubscribeEmail('');
         setSubscribeStatus({ type: 'idle', message: '' });
         setShowSuccessModal(true);
-        trackEvent('Newsletter Subscribe', source ? { source } : undefined);
+        trackEvent('Newsletter Confirmation Requested', source ? { source } : undefined);
       } else if (response.status === 429) {
         setSubscribeStatus({
           type: 'error',
@@ -87,7 +87,7 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
       } else {
         setSubscribeStatus({
           type: 'error',
-          message: result.error || 'Failed to subscribe. Please try again.',
+          message: 'We could not send your confirmation. Please try again later.',
         });
       }
     } catch (error) {
@@ -261,12 +261,12 @@ const NewsletterForm = ({ variant = 'full', source }: NewsletterFormProps) => {
               </div>
 
               <h3 id="newsletter-modal-title" className="text-white mb-4" style={typography.cardTitleLarge}>
-                Thank You for Subscribing!
+                Check your inbox
               </h3>
 
               <p className="text-altivum-silver mb-8" style={typography.bodyText}>
-                Check your email for a confirmation message. Be sure to check your spam folder and move it to your
-                primary inbox if needed.
+                Open the confirmation email and confirm your subscription. You will only receive updates after you
+                confirm. Check your spam folder if it has not arrived.
               </p>
 
               <button

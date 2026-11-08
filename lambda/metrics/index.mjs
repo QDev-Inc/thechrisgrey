@@ -36,6 +36,9 @@ async function putMetric(metricName, value, dimensions = []) {
         Timestamp: new Date(),
         Dimensions: dimensions,
       },
+      ...(dimensions.length
+        ? [{ MetricName: metricName, Value: value, Unit: /** @type {"None"} */ ("None"), Timestamp: new Date() }]
+        : []),
     ],
   });
   await withTimeout(cloudwatch.send(command), 5000, "cloudwatch_put_metric");
@@ -93,8 +96,9 @@ async function handleCspReport(body, log) {
 /**
  * @param {string} metricName
  * @param {number} [periodHours=24]
+ * @param {boolean} [includePercentile=false]
  */
-async function getMetricAverage(metricName, periodHours = 24) {
+async function getMetricAverage(metricName, periodHours = 24, includePercentile = false) {
   const now = new Date();
   const start = new Date(now.getTime() - periodHours * 60 * 60 * 1000);
 
@@ -108,8 +112,22 @@ async function getMetricAverage(metricName, periodHours = 24) {
   });
 
   const result = await withTimeout(cloudwatch.send(command), 8000, "cloudwatch_get_metric_avg");
+  const percentile = includePercentile
+    ? await withTimeout(
+        cloudwatch.send(
+          new GetMetricStatisticsCommand({
+            ...command.input,
+            Statistics: undefined,
+            ExtendedStatistics: ["p75"],
+          }),
+        ),
+        8000,
+        "cloudwatch_get_metric_percentile",
+      )
+    : null;
   const datapoint = result.Datapoints?.[0];
   return {
+    ...(includePercentile ? { p75: percentile?.Datapoints?.[0]?.ExtendedStatistics?.p75 ?? null } : {}),
     average: datapoint?.Average ?? null,
     count: datapoint?.SampleCount ?? 0,
   };
@@ -156,11 +174,11 @@ async function handleHealth(authHeader, log) {
   }
 
   const vitalsResults = await Promise.allSettled([
-    getMetricAverage("LCP"),
-    getMetricAverage("CLS"),
-    getMetricAverage("INP"),
-    getMetricAverage("FCP"),
-    getMetricAverage("TTFB"),
+    getMetricAverage("LCP", 24, true),
+    getMetricAverage("CLS", 24, true),
+    getMetricAverage("INP", 24, true),
+    getMetricAverage("FCP", 24, true),
+    getMetricAverage("TTFB", 24, true),
   ]);
   const [lcp, cls, inp, fcp, ttfb] = vitalsResults.map((r) => settledValue(r, { average: null, count: 0 }, log));
 
@@ -258,6 +276,7 @@ export const handler = async (event) => {
         table: "thechrisgrey-chat-ratelimit",
         ip: clientIp,
         prefix: "metrics-vitals-",
+        failOpen: true,
         maxRequests: 200,
         windowSeconds: 60,
         requestId,
@@ -279,6 +298,7 @@ export const handler = async (event) => {
         table: "thechrisgrey-chat-ratelimit",
         ip: clientIp,
         prefix: "metrics-csp-",
+        failOpen: true,
         maxRequests: 100,
         windowSeconds: 60,
         requestId,

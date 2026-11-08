@@ -6,7 +6,7 @@ import { getFeatureFlag } from '../utils/featureFlags';
 import type { BlueprintInput, BlueprintOutput, BlueprintResponse, BlueprintSuccessResponse } from '../types/blueprint';
 
 const BLUEPRINT_ENDPOINT = getFeatureFlag('blueprintEndpoint');
-const REQUEST_TIMEOUT_MS = 90_000; // Opus generation can take a while
+const REQUEST_TIMEOUT_MS = 110_000; // Allow the 100-second Lambda to return its terminal event.
 
 export type BlueprintErrorKind =
   | 'rate_limited'

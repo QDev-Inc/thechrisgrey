@@ -14,6 +14,15 @@ vi.mock('@aws-sdk/client-cognito-identity-provider', () => {
     InitiateAuthCommand: class {
       constructor(public params: unknown) {}
     },
+    RespondToAuthChallengeCommand: class {
+      constructor(public params: unknown) {}
+    },
+    AssociateSoftwareTokenCommand: class {
+      constructor(public params: unknown) {}
+    },
+    VerifySoftwareTokenCommand: class {
+      constructor(public params: unknown) {}
+    },
     GlobalSignOutCommand: class {
       constructor(public params: unknown) {}
     },
@@ -290,5 +299,65 @@ describe('useAuth', () => {
 
       expect(token).toBe('refreshed-access');
     });
+  });
+});
+
+describe('admin MFA', () => {
+  beforeEach(() => {
+    mockSend.mockReset();
+    sessionStorage.clear();
+  });
+  const authResult = {
+    AuthenticationResult: { AccessToken: 'access', IdToken: 'id', RefreshToken: 'refresh', ExpiresIn: 3600 },
+  };
+  it('requires the authenticator code before storing credentials', async () => {
+    mockSend
+      .mockResolvedValueOnce({ ChallengeName: 'SOFTWARE_TOKEN_MFA', Session: 'challenge-session' })
+      .mockResolvedValueOnce(authResult);
+    const { result } = renderHook(() => useAuth());
+    await act(() => result.current.login('admin@example.com', 'password'));
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(sessionStorage.getItem('admin-auth')).toBeNull();
+    expect(result.current.challenge?.name).toBe('SOFTWARE_TOKEN_MFA');
+    await act(() => result.current.respondToChallenge('123456'));
+    expect(mockSend.mock.calls[1][0].params.ChallengeResponses.SOFTWARE_TOKEN_MFA_CODE).toBe('123456');
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.challenge).toBeNull();
+  });
+  it('enrolls an authenticator and carries the verified session into the final challenge', async () => {
+    mockSend
+      .mockResolvedValueOnce({ ChallengeName: 'MFA_SETUP', Session: 'start' })
+      .mockResolvedValueOnce({ SecretCode: 'TESTSECRET', Session: 'associated' })
+      .mockResolvedValueOnce({ Status: 'SUCCESS', Session: 'verified' })
+      .mockResolvedValueOnce(authResult);
+    const { result } = renderHook(() => useAuth());
+    await act(() => result.current.login('admin@example.com', 'password'));
+    expect(result.current.challenge?.secret).toBe('TESTSECRET');
+    expect(sessionStorage.getItem('admin-auth')).toBeNull();
+    await act(() => result.current.respondToChallenge('123456'));
+    expect(mockSend.mock.calls[2][0].params.Session).toBe('associated');
+    expect(mockSend.mock.calls[3][0].params.Session).toBe('verified');
+    expect(result.current.isAuthenticated).toBe(true);
+  });
+  it('keeps a failed MFA challenge retryable without storing tokens', async () => {
+    mockSend
+      .mockResolvedValueOnce({ ChallengeName: 'SOFTWARE_TOKEN_MFA', Session: 'challenge' })
+      .mockRejectedValueOnce(new Error('invalid code'));
+    const { result } = renderHook(() => useAuth());
+    await act(() => result.current.login('admin@example.com', 'password'));
+    await act(() => result.current.respondToChallenge('000000'));
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.challenge?.session).toBe('challenge');
+    expect(sessionStorage.getItem('admin-auth')).toBeNull();
+  });
+  it('continues from a required password change to MFA', async () => {
+    mockSend
+      .mockResolvedValueOnce({ ChallengeName: 'NEW_PASSWORD_REQUIRED', Session: 'password' })
+      .mockResolvedValueOnce({ ChallengeName: 'SOFTWARE_TOKEN_MFA', Session: 'mfa' });
+    const { result } = renderHook(() => useAuth());
+    await act(() => result.current.login('admin@example.com', 'temporary'));
+    await act(() => result.current.respondToChallenge('long-new-password'));
+    expect(result.current.challenge?.name).toBe('SOFTWARE_TOKEN_MFA');
+    expect(result.current.isAuthenticated).toBe(false);
   });
 });

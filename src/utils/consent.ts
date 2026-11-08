@@ -1,11 +1,4 @@
-/**
- * Visitor consent for cookie-based analytics (PostHog).
- *
- * Plausible is cookieless and runs for everyone without consent. PostHog uses
- * cookies/localStorage and session replay, so it ONLY initializes after an
- * explicit opt-in. The choice is stored in localStorage so it persists across
- * visits; until a choice is made, getConsent() returns null and the banner shows.
- */
+/** Optional analytics start only after explicit consent. */
 const CONSENT_KEY = 'tcg-analytics-consent';
 
 export type ConsentValue = 'granted' | 'denied';

@@ -153,8 +153,8 @@ const Podcast = () => {
       </div>
 
       {/* Hero Section */}
-      <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden opacity-0 animate-fade-in">
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 md:py-32">
+      <section className="relative flex items-center justify-center overflow-hidden">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-12 md:pt-16 md:pb-16">
           <div className="max-w-4xl mx-auto text-center">
             <div className="mb-6 sm:mb-8">
               <ResponsiveImage

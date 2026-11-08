@@ -5,7 +5,7 @@ import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-sec
 import { checkRateLimit } from "lambda-shared/rateLimit";
 import { createLogger } from "lambda-shared/logger";
 import { readSecretString } from "lambda-shared/secrets";
-import { verifyTurnstile } from "lambda-shared/turnstile";
+import { verifyTurnstile, isTurnstileConfigured } from "lambda-shared/turnstile";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_API_URL = "https://api.resend.com/emails";
@@ -60,7 +60,10 @@ function validateBody(body) {
   if (name.length < 2 || name.length > 100) return null;
   if (!EMAIL_PATTERN.test(email) || email.length > 254) return null;
   if (message.length < 10 || message.length > 5000) return null;
-  return { name, email, message };
+  const subject = typeof body.subject === "string" ? body.subject.trim().replace(/[\r\n]/g, " ") : "";
+  const details = typeof body.details === "string" ? body.details.trim() : "";
+  if (subject.length > 200 || details.length > 1000) return null;
+  return { name, email, message, ...(subject ? { subject } : {}), ...(details ? { details } : {}) };
 }
 
 export async function sendContactEmail({ apiKey, from, recipient, contact, requestId, fetchImpl = fetch }) {
@@ -75,9 +78,9 @@ export async function sendContactEmail({ apiKey, from, recipient, contact, reque
       from,
       to: [recipient],
       reply_to: contact.email,
-      subject: `Website inquiry from ${contact.name}`,
-      text: `Name: ${contact.name}\nEmail: ${contact.email}\n\n${contact.message}`,
-      html: `<p><strong>Name:</strong> ${escapeHtml(contact.name)}</p><p><strong>Email:</strong> ${escapeHtml(contact.email)}</p><hr><pre style="white-space:pre-wrap;font:inherit">${escapeHtml(contact.message)}</pre>`,
+      subject: contact.subject || `Website inquiry from ${contact.name}`,
+      text: `Name: ${contact.name}\nEmail: ${contact.email}\n${contact.details || ""}\n\n${contact.message}`,
+      html: `<p><strong>Name:</strong> ${escapeHtml(contact.name)}</p><p><strong>Email:</strong> ${escapeHtml(contact.email)}</p><hr><pre style="white-space:pre-wrap;font:inherit">${escapeHtml(contact.details || "")}\n\n${escapeHtml(contact.message)}</pre>`,
       tags: [{ name: "source", value: "thechrisgrey-contact" }],
     }),
   });
@@ -91,6 +94,7 @@ export function createContactEmailHandler({ checkRateLimitImpl, verifyTurnstileI
   return async function contactEmailHandler(event) {
     const method = event.requestContext?.http?.method;
     if (method === "OPTIONS") return { statusCode: 204, body: "" };
+    if (!isTurnstileConfigured(config.turnstileSecret)) return reply(503, { error: "service_unavailable" });
     if (method === "GET") return reply(200, { ok: true, service: "contact-email", version: "1.0.0" });
     if (method !== "POST") return reply(405, { error: "method_not_allowed" });
 
@@ -108,6 +112,8 @@ export function createContactEmailHandler({ checkRateLimitImpl, verifyTurnstileI
     } catch {
       return reply(400, { error: "invalid_json" });
     }
+
+    if (!body || typeof body !== "object" || Array.isArray(body)) return reply(400, { error: "invalid_request" });
 
     if (typeof body.website === "string" && body.website.trim()) return reply(202, { ok: true });
 
@@ -162,7 +168,7 @@ export const handler = createContactEmailHandler({
       windowSeconds: 3600,
       requestId,
     }),
-  verifyTurnstileImpl: verifyTurnstile,
+  verifyTurnstileImpl: (token, secret, ip) => verifyTurnstile(token, secret, ip, fetch, { action: "contact" }),
   getApiKey: async () => extractApiKey(await readSecretString(secretsClient, GetSecretValueCommand, RESEND_SECRET_ARN)),
   sendEmail: sendContactEmail,
   config: {

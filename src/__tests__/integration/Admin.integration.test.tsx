@@ -16,6 +16,15 @@ vi.mock('@aws-sdk/client-cognito-identity-provider', () => ({
   InitiateAuthCommand: class {
     constructor(public params: unknown) {}
   },
+  RespondToAuthChallengeCommand: class {
+    constructor(public params: unknown) {}
+  },
+  AssociateSoftwareTokenCommand: class {
+    constructor(public params: unknown) {}
+  },
+  VerifySoftwareTokenCommand: class {
+    constructor(public params: unknown) {}
+  },
   GlobalSignOutCommand: class {
     constructor(public params: unknown) {}
   },

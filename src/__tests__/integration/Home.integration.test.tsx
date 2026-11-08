@@ -54,10 +54,8 @@ describe('Home Page Integration', () => {
   describe('Summary section with key points', () => {
     it('renders all 5 key points with correct titles', () => {
       renderHome();
-      // Key-point titles render as h2 (demoted from h3 to fix the heading
-      // outline, which previously skipped h1 -> h3). The CTA "Let's Connect"
-      // h2 is also at this level; assertions below only check membership.
-      const headings = screen.getAllByRole('heading', { level: 2 });
+      // Work cards follow the section heading in the document outline.
+      const headings = screen.getAllByRole('heading', { level: 3 });
       const titles = headings.map((h) => h.textContent?.replace(/\s+/g, ' ').trim());
       expect(titles).toContain('Personal Biography');
       expect(titles).toContain('Altivum Inc');
@@ -88,20 +86,12 @@ describe('Home Page Integration', () => {
       expect(findLink('/aws')).toBeDefined();
     });
 
-    it('renders the profile image inside a responsive <picture>', () => {
+    it('provides responsive JPEGs without downloading a second portrait', () => {
       renderHome();
-      const scrollSectionImage = screen
-        .getAllByAltText('Christian Perez')
-        .find((image) => image.getAttribute('src') === '/mock-profile1.jpeg');
-
-      expect(scrollSectionImage).toBeDefined();
-
-      // The scroll section uses responsive AVIF and WebP variants to limit its
-      // full-viewport image cost. The hero intentionally uses a distinct press-kit image.
-      const picture = scrollSectionImage?.closest('picture');
-      expect(picture).not.toBeNull();
-      expect(picture?.querySelector('source[type="image/avif"]')).not.toBeNull();
-      expect(picture?.querySelector('source[type="image/webp"]')).not.toBeNull();
+      const portraits = screen.getAllByAltText('Christian Perez');
+      expect(portraits).toHaveLength(1);
+      expect(portraits[0]).toHaveAttribute('srcset', expect.stringContaining('hero-portrait-480.jpg'));
+      expect(portraits[0]).toHaveAttribute('fetchpriority', 'high');
     });
   });
 

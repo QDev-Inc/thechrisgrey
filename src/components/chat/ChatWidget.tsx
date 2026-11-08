@@ -19,7 +19,7 @@ const ChatWidgetPanel = lazy(() => import('./ChatWidgetPanel'));
 // chunk fetch or a render throw occupies exactly the box the dialog will. Keep
 // in sync with ChatWidgetPanel's container.
 const PANEL_SHELL =
-  'fixed bottom-24 right-6 z-40 w-[calc(100vw-2rem)] h-[calc(100vh-8rem)] sm:w-[400px] sm:h-[560px] bg-altivum-navy border border-white/10 rounded-2xl shadow-2xl';
+  'fixed bottom-[calc(6rem+var(--consent-bottom,0px))] right-4 sm:right-6 z-40 w-[calc(100vw-2rem)] h-[calc(100dvh-11rem-var(--consent-bottom,0px))] sm:w-[400px] sm:h-[560px] bg-altivum-navy border border-white/10 rounded-2xl shadow-2xl';
 
 // The sessionStorage key owned by useChatEngine (CHAT_STORAGE_KEY), mirrored here
 // as a literal on purpose: importing it would pull the chat engine — and with it

@@ -5,8 +5,8 @@
  * Stage transcript chunks for the dedicated Vector Podcast Knowledge Base.
  *
  * For each episode in src/data/generatedEpisodes.json, this:
- *   1. Fetches the public English caption track from YouTube timedtext (no auth), OR
- *      falls back to a local transcript at podcast-transcripts/<videoId>.json
+ *   1. Reads a local transcript at podcast-transcripts/<videoId>.json, OR
+ *      fetches the public English caption track from YouTube timedtext (no auth)
  *      (an array of { start: number, dur?: number, text: string } cues — e.g. the
  *      output of Amazon Transcribe / Whisper for episodes without public captions).
  *   2. Chunks cues into ~45s / ~600-char windows, each tagged with its startSeconds.
@@ -19,10 +19,13 @@
  * deliberate, operator-controlled steps.
  *
  * Usage:
- *   node scripts/ingest-podcast-transcripts.mjs
+ *   node scripts/ingest-podcast-transcripts.mjs [--local-only]
+ *
+ * A complete run also refreshes lambda/chat-stream/podcast-index.json for
+ * timestamped keyword search when KNOWLEDGE_SOURCE=sanity. Commit that snapshot.
  *
  * Env (only used in the printed commands):
- *   PODCAST_KB_SOURCE_BUCKET   default: thechrisgrey-kb-podcast-source
+ *   PODCAST_KB_SOURCE_BUCKET   PodcastKnowledgeBaseSourceBucketName stack output
  *   PODCAST_KB_ID              the dedicated podcast KB id (required to print ingest cmd)
  *   PODCAST_KB_DATA_SOURCE_ID  the podcast KB data source id
  */
@@ -30,6 +33,7 @@
 import { readFileSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { buildPodcastEpisode, PODCAST_CONTENT_PREFIX } from './lib/podcast-corpus.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -37,10 +41,8 @@ const EPISODES_PATH = join(ROOT, 'src', 'data', 'generatedEpisodes.json');
 const LOCAL_TRANSCRIPTS_DIR = join(ROOT, 'podcast-transcripts');
 const STAGING_DIR = join(ROOT, 'podcast-kb-staging');
 
-const WINDOW_SECONDS = 45;
-const WINDOW_MAX_CHARS = 600;
-
-const BUCKET = process.env.PODCAST_KB_SOURCE_BUCKET || 'thechrisgrey-kb-podcast-source';
+const BUNDLED_INDEX = join(ROOT, 'lambda', 'chat-stream', 'podcast-index.json');
+const BUCKET = process.env.PODCAST_KB_SOURCE_BUCKET || '<PodcastKnowledgeBaseSourceBucketName>';
 const KB_ID = process.env.PODCAST_KB_ID || '<PODCAST_KB_ID>';
 const DATA_SOURCE_ID = process.env.PODCAST_KB_DATA_SOURCE_ID || '<PODCAST_KB_DATA_SOURCE_ID>';
 
@@ -70,7 +72,7 @@ function parseTimedText(xml) {
 async function fetchYouTubeCaptions(videoId) {
   const url = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}`;
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
     const xml = await res.text();
     if (!xml || !xml.includes('<text')) return null;
@@ -87,38 +89,14 @@ function loadLocalTranscript(videoId) {
   try {
     const cues = JSON.parse(readFileSync(path, 'utf8'));
     if (!Array.isArray(cues)) return null;
-    return cues
-      .filter((c) => c && typeof c.text === 'string' && Number.isFinite(Number(c.start)))
-      .map((c) => ({ start: Number(c.start), dur: Number(c.dur) || 0, text: String(c.text).trim() }));
+    return cues;
   } catch {
     return null;
   }
 }
 
-/** Merge cues into ~WINDOW_SECONDS / ~WINDOW_MAX_CHARS windows. */
-function chunkCues(cues) {
-  const windows = [];
-  let current = null;
-  for (const cue of cues) {
-    if (!current) {
-      current = { start: Math.floor(cue.start), text: cue.text };
-      continue;
-    }
-    const spanned = cue.start - current.start;
-    const wouldOverflow = spanned >= WINDOW_SECONDS || current.text.length + cue.text.length + 1 > WINDOW_MAX_CHARS;
-    if (wouldOverflow) {
-      windows.push(current);
-      current = { start: Math.floor(cue.start), text: cue.text };
-    } else {
-      current.text += ` ${cue.text}`;
-    }
-  }
-  if (current) windows.push(current);
-  return windows;
-}
-
 function writeChunk(videoId, episode, window) {
-  const startSeconds = Math.max(0, Math.floor(window.start));
+  const startSeconds = window.startSeconds;
   const base = `${videoId}-${startSeconds}`;
   writeFileSync(join(STAGING_DIR, `${base}.txt`), window.text.trim(), 'utf8');
   const metadata = {
@@ -145,6 +123,7 @@ async function main() {
   mkdirSync(STAGING_DIR, { recursive: true });
 
   const summary = { processed: [], skipped: [], totalChunks: 0 };
+  const archive = { version: 1, episodes: [] };
 
   for (const episode of episodes) {
     const videoId = episode.videoId;
@@ -153,11 +132,11 @@ async function main() {
       continue;
     }
 
-    let cues = await fetchYouTubeCaptions(videoId);
-    let source = 'youtube-captions';
-    if (!cues) {
-      cues = loadLocalTranscript(videoId);
-      source = 'local-transcript';
+    let cues = loadLocalTranscript(videoId);
+    let source = 'local-transcript';
+    if (!cues && !process.argv.includes('--local-only')) {
+      cues = await fetchYouTubeCaptions(videoId);
+      source = 'youtube-captions';
     }
     if (!cues || cues.length === 0) {
       summary.skipped.push({
@@ -168,7 +147,9 @@ async function main() {
       continue;
     }
 
-    const windows = chunkCues(cues);
+    const entry = buildPodcastEpisode(episode, cues);
+    const windows = entry.chunks;
+    archive.episodes.push(entry);
     for (const w of windows) writeChunk(videoId, episode, w);
     summary.totalChunks += windows.length;
     summary.processed.push({ title: episode.title, videoId, chunks: windows.length, source });
@@ -191,10 +172,12 @@ async function main() {
 
   console.log('\n=== Next steps (operator-run — these touch AWS) ===');
   console.log(`1. Sync chunks to S3:`);
-  console.log(`     aws s3 sync ${STAGING_DIR} s3://${BUCKET}/ --region us-east-1 --delete`);
+  console.log(
+    `     aws s3 sync ${STAGING_DIR} s3://${BUCKET}/${PODCAST_CONTENT_PREFIX} --profile qdev-personal --region us-east-1`,
+  );
   console.log(`2. Start ingestion into the podcast KB:`);
   console.log(
-    `     aws bedrock-agent start-ingestion-job --knowledge-base-id ${KB_ID} --data-source-id ${DATA_SOURCE_ID} --region us-east-1`,
+    `     aws bedrock-agent start-ingestion-job --knowledge-base-id ${KB_ID} --data-source-id ${DATA_SOURCE_ID} --profile qdev-personal --region us-east-1`,
   );
   console.log('');
 
@@ -202,6 +185,11 @@ async function main() {
     console.error('No chunks were produced. Provide captions or local transcripts before syncing.');
     process.exit(1);
   }
+  if (summary.skipped.length > 0) {
+    throw new Error('Bundled archive was not replaced: provide transcripts for every published episode first.');
+  }
+  writeFileSync(BUNDLED_INDEX, `${JSON.stringify(archive, null, 2)}\n`, 'utf8');
+  console.log(`Bundled timestamped search index: ${BUNDLED_INDEX}`);
 }
 
 main().catch((err) => {

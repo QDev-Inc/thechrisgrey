@@ -3,8 +3,8 @@ info:
   title: Blueprint Generator API
   version: '1.0.0'
   description: |
-    Architecture-blueprint generator. Opus generates a blueprint from a project
-    spec; Haiku 4.5 grades it for quality. Deployed as an AWS Lambda Function URL
+    Architecture-blueprint generator. The configured inference provider generates
+    a blueprint from a project spec and performs a separate quality check. Deployed as an AWS Lambda Function URL
     invoked with `awslambda.streamifyResponse`.
 
     Authentication accepts a server-issued session token
@@ -28,7 +28,7 @@ info:
     body-size, validation, rate limit) return a normal JSON body with the
     appropriate status.
 
-    Rate limited to 1 blueprint per 30-day window, keyed by device hash.
+    One successful blueprint per 30-day window, keyed by the authenticated device hash. Failed generations release the allowance. Concurrent generations, per-IP attempts (5/hour), and service attempts (20/hour) are limited.
 servers:
   - url: https://blueprint.lambda-url.us-east-1.on.aws
     description: Lambda Function URL (region us-east-1)
@@ -58,13 +58,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/BlueprintEvent'
         '400':
-          description: Pre-stream rejection (invalid_json, missing_spec, invalid_device_id)
+          description: Pre-stream rejection (invalid_json, missing_spec, invalid_device_id, invalid_input)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized
+          description: Unauthorized or device ID does not match the signed session token
           content:
             application/json:
               schema:
@@ -82,7 +82,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '429':
-          description: rate_limited (1 blueprint / 30-day window)
+          description: rate_limited (allowance used, generation in progress, or attempt limit reached)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Quota storage is temporarily unavailable; generation did not start.
           content:
             application/json:
               schema:
@@ -177,7 +183,7 @@ components:
         requestId: { type: string }
         text:
           type: string
-          description: Present on `token` events (Opus output delta).
+          description: Present on `token` events (model output delta).
         phase: { type: string }
         attempt: { type: integer }
         ok:
@@ -194,7 +200,7 @@ components:
           additionalProperties: true
     BlueprintOutput:
       type: object
-      description: Blueprint payload (BlueprintOutputSchema in schema.mjs), Haiku-validated.
+      description: Blueprint payload (BlueprintOutputSchema in schema.mjs), quality-checked.
       required:
         - architecture_summary
         - services

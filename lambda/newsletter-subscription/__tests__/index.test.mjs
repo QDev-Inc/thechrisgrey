@@ -5,7 +5,13 @@ import { createNewsletterHandler, subscribeContact } from "../index.mjs";
 const ORIGIN = "https://thechrisgrey.com";
 
 function baseConfig(overrides = {}) {
-  return { allowedOrigins: [ORIGIN], turnstileSecret: "turnstile-secret", segmentId: "segment_123", ...overrides };
+  return {
+    allowedOrigins: [ORIGIN],
+    turnstileSecret: "turnstile-secret",
+    segmentId: "segment_123",
+    blueprintSegmentId: "blueprint_segment",
+    ...overrides,
+  };
 }
 
 function makeEvent({ method = "POST", origin = ORIGIN, body, ip = "9.9.9.9" } = {}) {
@@ -21,7 +27,8 @@ function makeHandler({ allowed = true, turnstilePass = true, subscribe = async (
     checkRateLimitImpl: async () => ({ allowed }),
     verifyTurnstileImpl: async () => turnstilePass,
     getApiKey: async () => "re_test_key",
-    subscribe,
+    requestConfirmation: subscribe,
+    confirmSubscription: async () => ({ ok: true, source: "newsletter" }),
     config: baseConfig(config),
   });
 }
@@ -64,8 +71,14 @@ test("accepts a valid subscriber and normalizes their email", async () => {
       received = input;
     },
   })(makeEvent({ body: { email: " Person@Example.com " } }));
-  assert.equal(response.statusCode, 201);
-  assert.deepEqual(received, { apiKey: "re_test_key", email: "person@example.com", segmentId: "segment_123" });
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(received, {
+    apiKey: "re_test_key",
+    email: "person@example.com",
+    segmentId: "segment_123",
+    source: "newsletter",
+    origin: ORIGIN,
+  });
 });
 
 test("returns a generic provider failure", async () => {
@@ -117,4 +130,11 @@ test("subscribeContact reactivates an existing contact and ignores an existing s
   assert.equal(requests.length, 3);
   assert.equal(requests[1].init.method, "PATCH");
   assert.equal(requests[2].url, "https://api.resend.com/contacts/person%40example.com/segments/segment_123");
+});
+
+test("missing Turnstile configuration rejects requests", async () => {
+  const response = await makeHandler({ config: { turnstileSecret: "" } })(
+    makeEvent({ body: { email: "person@example.com" } }),
+  );
+  assert.equal(response.statusCode, 503);
 });

@@ -56,7 +56,7 @@ function parseBody(res) {
   return JSON.parse(res.body);
 }
 
-function validTokenHeaders(scope = "chat") {
+function validTokenHeaders(scope = "mcp") {
   const token = issueSessionToken({ deviceHash: "a".repeat(64), scope }, SESSION_KEY, 300);
   return { authorization: `Bearer ${token}` };
 }
@@ -163,15 +163,15 @@ test("CORS Access-Control-Allow-Origin is never '*' on a tools/call rejection", 
     }),
   );
   assert.notEqual(res.headers["Access-Control-Allow-Origin"], "*");
-  assert.equal(res.headers["Access-Control-Allow-Origin"], "https://thechrisgrey.com");
+  assert.equal(res.headers["Access-Control-Allow-Origin"], undefined);
 });
 
-test("a valid chat-scoped token is admitted past auth (reaches tool dispatch, not 401/403)", async () => {
+test("a valid mcp-scoped token is admitted past auth (reaches tool dispatch, not 401/403)", async () => {
   // ask_alti with a 2-char question triggers the tool's own input validation,
   // returning an isError result (not 401/403) — proving auth admitted it.
   const res = await handler(
     makeEvent({
-      headers: validTokenHeaders("chat"),
+      headers: validTokenHeaders("mcp"),
       body: {
         jsonrpc: "2.0",
         id: 8,

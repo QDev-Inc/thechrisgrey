@@ -26,6 +26,7 @@ const Blog = lazy(() => import('./pages/Blog'));
 const BlogPost = lazy(() => import('./pages/BlogPost'));
 const Links = lazy(() => import('./pages/Links'));
 const Contact = lazy(() => import('./pages/Contact'));
+const NewsletterConfirm = lazy(() => import('./pages/NewsletterConfirm'));
 const Chat = lazy(() => import('./pages/Chat'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const AWS = lazy(() => import('./pages/AWS'));
@@ -154,6 +155,7 @@ function App() {
               />
               <Route path="/links" element={<Links />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/aws" element={<AWS />} />
               <Route path="/claude" element={<Claude />} />

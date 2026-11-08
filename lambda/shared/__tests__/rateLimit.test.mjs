@@ -80,16 +80,16 @@ test("ConditionalCheckFailed resets the stale window and re-allows", async () =>
   assert.match(client.calls[1].UpdateExpression, /SET requestCount = :one/);
 });
 
-test("ConditionalCheckFailed whose reset also throws fails open with remaining -1", async () => {
+test("ConditionalCheckFailed whose reset also throws fails closed with remaining -1", async () => {
   const client = throwingClient(conditionalFail(), { resetThrows: true });
   const result = await checkRateLimit(client, FakeUpdateCommand, OPTS);
-  assert.deepEqual(result, { allowed: true, remaining: -1 });
+  assert.deepEqual(result, { allowed: false, remaining: -1 });
 });
 
-test("any other DynamoDB error fails open with remaining -1", async () => {
+test("any other DynamoDB error fails closed with remaining -1", async () => {
   const client = throwingClient(Object.assign(new Error("boom"), { name: "ProvisionedThroughputExceededException" }));
   const result = await checkRateLimit(client, FakeUpdateCommand, OPTS);
-  assert.deepEqual(result, { allowed: true, remaining: -1 });
+  assert.deepEqual(result, { allowed: false, remaining: -1 });
   assert.equal(client.calls.length, 1, "non-conditional errors must NOT trigger a reset send");
 });
 
@@ -97,4 +97,36 @@ test("applies the prefix to the partition key", async () => {
   const client = countingClient(1);
   await checkRateLimit(client, FakeUpdateCommand, { ...OPTS, prefix: "metrics-vitals-" });
   assert.ok(client.calls[0].Key.pk.startsWith("metrics-vitals-"));
+});
+
+test("a concurrent window reset retries the increment instead of overwriting the winner", async () => {
+  const calls = [];
+  const client = {
+    send: async (command) => {
+      calls.push(command.input);
+      if (calls.length <= 2) throw conditionalFail();
+      return { Attributes: { requestCount: 2 } };
+    },
+  };
+  const result = await checkRateLimit(client, FakeUpdateCommand, { ...OPTS, maxRequests: 1 });
+  assert.deepEqual(result, { allowed: false, remaining: 0 });
+  assert.equal(calls[1].ConditionExpression, "windowStart < :ws");
+  assert.equal(calls.length, 3);
+});
+
+test("a failed retry after losing a reset race denies the request", async () => {
+  const client = {
+    send: async () => {
+      throw conditionalFail();
+    },
+  };
+  assert.deepEqual(await checkRateLimit(client, FakeUpdateCommand, OPTS), { allowed: false, remaining: -1 });
+});
+
+test("telemetry may explicitly choose availability when storage is unavailable", async () => {
+  const client = throwingClient(new Error("unavailable"));
+  assert.deepEqual(await checkRateLimit(client, FakeUpdateCommand, { ...OPTS, failOpen: true }), {
+    allowed: true,
+    remaining: -1,
+  });
 });

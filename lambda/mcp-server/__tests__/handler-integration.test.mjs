@@ -90,39 +90,18 @@ function parseBody(res) {
 
 /** A valid chat-scoped session token for the tools/call auth lockdown. */
 function authHeaders() {
-  const token = issueSessionToken({ deviceHash: "a".repeat(64), scope: "chat" }, SESSION_KEY, 300);
+  const token = issueSessionToken({ deviceHash: "a".repeat(64), scope: "mcp" }, SESSION_KEY, 300);
   return { authorization: `Bearer ${token}` };
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-test("OPTIONS preflight returns 204 with tightened CORS headers", async () => {
-  const res = await handler(makeEvent({ method: "OPTIONS" }));
-  assert.equal(res.statusCode, 204);
-  // CORS is no longer a wildcard — it echoes the configured production origin
-  // when no allowlisted Origin header is supplied.
-  assert.notEqual(res.headers["Access-Control-Allow-Origin"], "*");
-  assert.equal(res.headers["Access-Control-Allow-Origin"], "https://thechrisgrey.com");
-  assert.equal(res.headers["Access-Control-Allow-Methods"], "POST, OPTIONS");
-  assert.equal(res.headers["Access-Control-Allow-Credentials"], "true");
-  assert.ok(
-    res.headers["Access-Control-Allow-Headers"].toLowerCase().includes("authorization"),
-    "Authorization header is allowed for tools/call bearer tokens",
-  );
-});
-
-test("OPTIONS preflight echoes an allowlisted request Origin", async () => {
-  const res = await handler(makeEvent({ method: "OPTIONS", headers: { origin: "https://thechrisgrey.com" } }));
-  assert.equal(res.statusCode, 204);
-  assert.equal(res.headers["Access-Control-Allow-Origin"], "https://thechrisgrey.com");
-  assert.equal(res.headers["Vary"], "Origin");
-});
-
-test("OPTIONS preflight does NOT echo a non-allowlisted Origin", async () => {
-  const res = await handler(makeEvent({ method: "OPTIONS", headers: { origin: "https://evil.example.com" } }));
-  assert.equal(res.statusCode, 204);
-  assert.notEqual(res.headers["Access-Control-Allow-Origin"], "https://evil.example.com");
-  assert.equal(res.headers["Access-Control-Allow-Origin"], "https://thechrisgrey.com");
+test("OPTIONS fallback leaves CORS to the Function URL for every origin", async () => {
+  for (const origin of [undefined, "https://thechrisgrey.com", "https://evil.example.com"]) {
+    const res = await handler(makeEvent({ method: "OPTIONS", headers: origin ? { origin } : {} }));
+    assert.equal(res.statusCode, 204);
+    assert.equal(res.headers["Access-Control-Allow-Origin"], undefined);
+  }
 });
 
 test("GET /health returns 200 with server info", async () => {

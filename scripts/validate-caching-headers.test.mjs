@@ -47,16 +47,12 @@ describe('caching and third-party script config', () => {
   });
 
   describe('VAL-PERF-012 — no render-blocking third-party scripts', () => {
-    it('plausible-init.js loads with defer', () => {
-      const match = indexHtml.match(/<script[^>]*src="\/plausible-init\.js"[^>]*>/);
-      expect(match, 'plausible-init.js script tag must exist').not.toBeNull();
-      expect(match[0]).toMatch(/\bdefer\b/);
-      expect(match[0]).not.toMatch(/\basync\b/);
+    it('does not load analytics before the consent-gated application loader', () => {
+      expect(indexHtml).not.toMatch(/<script[^>]*src="[^"]*(plausible|cloudflareinsights|posthog)/);
     });
 
     it('every third-party CDN script is async or defer (never synchronous)', () => {
       const externalScripts = [...indexHtml.matchAll(/<script\b[^>]*\bsrc="https?:\/\/[^"]*"[^>]*>/g)].map((m) => m[0]);
-      expect(externalScripts.length, 'should have at least one external script').toBeGreaterThan(0);
       for (const tag of externalScripts) {
         const isAsyncOrDefer = /\b(async|defer)\b/.test(tag);
         expect(isAsyncOrDefer, `external script must be async or defer: ${tag}`).toBe(true);
@@ -79,28 +75,17 @@ describe('caching and third-party script config', () => {
     });
   });
 
-  describe('VAL-PERF-014 — SRI on stable third-party CDN scripts', () => {
-    it('Plausible script has integrity and crossorigin attributes', () => {
-      const match = indexHtml.match(/<script[^>]*\bsrc="https:\/\/plausible\.io\/[^"]*"[^>]*>/);
-      expect(match, 'Plausible script tag must exist').not.toBeNull();
-      expect(match[0], 'integrity attribute').toMatch(/\bintegrity="sha384-[^"]*"/);
-      expect(match[0], 'crossorigin attribute').toMatch(/\bcrossorigin="anonymous"/);
-    });
-  });
-
   describe('VAL-PERF-008 — preconnect set covers used origins, no dead preconnects', () => {
     // Origins that are preconnected globally in index.html (used on every
     // page within 10s). Page-specific origins (cdn.sanity.io, i.ytimg.com) are
     // injected per-route by SEO.tsx and
     // therefore must NOT appear in the static shell.
-    const globalPreconnects = [
-      'https://plausible.io',
-      'https://static.cloudflareinsights.com',
-      'https://us.i.posthog.com',
-    ];
     // Dead preconnects — no page requests these within 10s, so they must be
     // absent from index.html entirely.
     const deadPreconnects = [
+      'https://plausible.io',
+      'https://static.cloudflareinsights.com',
+      'https://us.i.posthog.com',
       'https://dataplane.rum.us-east-1.amazonaws.com',
       'https://www.buzzsprout.com',
       'https://cognito-idp.us-east-1.amazonaws.com',
@@ -111,12 +96,6 @@ describe('caching and third-party script config', () => {
 
     const preconnectHrefs = () =>
       [...indexHtml.matchAll(/<link\s+[^>]*rel="preconnect"[^>]*href="([^"]+)"/gi)].map((m) => m[1]);
-
-    for (const origin of globalPreconnects) {
-      it(`index.html globally preconnects to ${origin}`, () => {
-        expect(preconnectHrefs(), `expected a global preconnect to ${origin}`).toContain(origin);
-      });
-    }
 
     for (const origin of deadPreconnects) {
       it(`index.html does NOT preconnect to dead origin ${origin}`, () => {

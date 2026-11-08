@@ -3,8 +3,8 @@
 // Files already ignored by .prettierignore or eslint.config.js are skipped.
 
 export default {
-  'src/**/*.{ts,tsx}': 'eslint --max-warnings 0 --fix',
-  'lambda/**/*.mjs': 'eslint --max-warnings 0 --fix',
-  'scripts/**/*.{js,mjs}': 'eslint --max-warnings 0 --fix',
+  'src/**/*.{ts,tsx}': 'eslint --max-warnings 0 --no-warn-ignored --fix',
+  'lambda/**/*.mjs': 'eslint --max-warnings 0 --no-warn-ignored --fix',
+  'scripts/**/*.{js,mjs}': 'eslint --max-warnings 0 --no-warn-ignored --fix',
   '**/*': 'prettier --write --ignore-unknown',
 };

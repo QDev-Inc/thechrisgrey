@@ -79,6 +79,10 @@ Style rules:
 - Artifact bodies: a skill is a valid SKILL.md. A slash command is the full body.
   A subagent is its full system prompt. An MCP tool is the inputSchema JSON + a
   concrete handler sketch.
+- Prefer one complete artifact with a 400–1200 character body. Include concrete
+  steps, commands, and verification criteria in the body itself, not a short
+  description of what could be written. Every artifact body must exceed 100
+  characters. Check each field's length before returning the JSON.
 - Cost: monthly_low_usd is the steady-state floor, monthly_high_usd is the burst
   ceiling. Both must be >= 0 and <= 100000.`;
 

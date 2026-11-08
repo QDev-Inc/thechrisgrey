@@ -130,7 +130,7 @@ describe('Waitlist', () => {
       await user.click(getByRole('button', { name: /join waitlist/i }));
 
       const status = await findByRole('status');
-      expect(status).toHaveTextContent(/you're on the list/i);
+      expect(status).toHaveTextContent(/check your inbox/i);
 
       // Verify the request payload and endpoint.
       expect(mockFetch).toHaveBeenCalledTimes(1);

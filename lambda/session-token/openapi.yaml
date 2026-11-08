@@ -8,7 +8,7 @@ info:
     shipping a shared HMAC key in the browser bundle; the signing key now lives
     only server-side.
 
-    Flow: origin allowlist -> per-IP issuance rate limit -> Cloudflare Turnstile
+    Flow: origin allowlist -> per-IP issuance rate limit -> Cloudflare Turnstile (action session, allowlisted hostname)
     verification -> issue tokens. CORS is handled solely by the Function URL CORS
     config, so the handler emits no `Access-Control-*` headers itself.
 servers:
@@ -58,6 +58,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '503':
+          description: Signing key or Turnstile configuration unavailable; issuance is disabled.
         '429':
           description: rate_limited
           content:
@@ -83,7 +85,7 @@ components:
           pattern: '^[a-zA-Z0-9_-]{8,64}$'
         turnstileToken:
           type: string
-          description: Cloudflare Turnstile response token (required when Turnstile is enabled).
+          description: Cloudflare Turnstile (action session, allowlisted hostname) response token (required when Turnstile is enabled).
     IssueResponse:
       type: object
       required: [chatToken, blueprintToken, chatExpiresIn, blueprintExpiresIn]
@@ -91,6 +93,12 @@ components:
         chatToken:
           type: string
           description: Session token scoped to `chat`.
+        mcpToken:
+          type: string
+          description: Bearer token scoped to MCP tool calls.
+        mcpExpiresIn:
+          type: integer
+          description: MCP session lifetime in seconds.
         blueprintToken:
           type: string
           description: Session token scoped to `blueprint`.

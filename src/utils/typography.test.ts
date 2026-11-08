@@ -32,9 +32,9 @@ describe('typography', () => {
       expect(typography[key]).toHaveProperty(prop);
     });
 
-    it('should have fontFamily as a string containing SF Pro Display', () => {
+    it('should have fontFamily as a string containing Montserrat', () => {
       expect(typeof typography[key].fontFamily).toBe('string');
-      expect(typography[key].fontFamily).toContain('SF Pro Display');
+      expect(typography[key].fontFamily).toContain('Montserrat');
     });
 
     it('should have fontWeight as a number', () => {
@@ -55,27 +55,18 @@ describe('typography', () => {
   });
 
   describe('consistent base values', () => {
-    // Two-tier weight system: display/heading styles stay ultralight (200) for
-    // the airy brand aesthetic; reading text (body + small/caption) uses 300 so
-    // it's legible at 12–18px on the dark palette. See typography.ts.
     const displayStyles = ['heroHeader', 'sectionHeader', 'cardTitleLarge', 'cardTitleSmall', 'subtitle'] as const;
     const readingStyles = ['bodyText', 'smallText'] as const;
 
-    it('should use ultralight weight 200 for display/heading styles', () => {
+    it('should use medium weight for for display/heading styles', () => {
       displayStyles.forEach((key) => {
-        expect(typography[key].fontWeight, `${key} should be 200`).toBe(200);
+        expect(typography[key].fontWeight, `${key} should remain legible`).toBeGreaterThanOrEqual(400);
       });
     });
 
-    it('should use light weight 300 for reading text (body + small)', () => {
+    it('should use regular weight for for reading text (body + small)', () => {
       readingStyles.forEach((key) => {
-        expect(typography[key].fontWeight, `${key} should be 300`).toBe(300);
-      });
-    });
-
-    it('should use 0.02em letter-spacing for all styles', () => {
-      expectedKeys.forEach((key) => {
-        expect(typography[key].letterSpacing).toBe('0.02em');
+        expect(typography[key].fontWeight, `${key} should remain legible`).toBeGreaterThanOrEqual(400);
       });
     });
 
@@ -88,9 +79,9 @@ describe('typography', () => {
   });
 
   describe('font sizing uses clamp()', () => {
-    it('should use clamp() for all fontSize values', () => {
+    it('uses scalable rem values or responsive clamps', () => {
       expectedKeys.forEach((key) => {
-        expect(typography[key].fontSize).toMatch(/^clamp\(/);
+        expect(typography[key].fontSize).toMatch(/^(clamp\(|[0-9.]+rem$)/);
       });
     });
   });

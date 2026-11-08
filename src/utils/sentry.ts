@@ -1,28 +1,6 @@
-/**
- * Sentry error tracking initialization.
- *
- * Provides structured error capture with source maps, breadcrumbs, and user
- * context. Complements CloudWatch RUM (which focuses on performance monitoring)
- * with Sentry's superior error grouping, release tracking, and stack trace
- * resolution.
- *
- * Consent-gated: only initializes when VITE_SENTRY_DSN is set AND the visitor
- * has granted analytics consent. Sentry uses cookies/storage and (via
- * replayIntegration) session replay, so — like PostHog — it stays completely
- * dormant until opt-in. Without a DSN or without consent it makes no network
- * calls and captures nothing.
- *
- * Integration points:
- *  - ErrorBoundary.tsx: captures React component errors with component stack
- *  - App.tsx: calls enableSentry() on mount for already-consented visitors,
- *    sets user context, and forwards RUM breadcrumbs
- *  - ConsentBanner.tsx: calls enableSentry() when the visitor accepts
- *  - Privacy.tsx: calls disableSentry() when the visitor withdraws consent
- *  - vite.config.ts: @sentry/vite-plugin uploads source maps during build
- *  - rum.ts: breadcrumbs from RUM are forwarded to Sentry for double-coverage
- */
-
-import * as Sentry from '@sentry/react';
+import { sanitizeTelemetry } from './telemetryPrivacy';
+let Sentry: typeof import('@sentry/react') | null = null;
+let loading = false;
 import { getConsent } from './consent';
 
 const DSN = import.meta.env.VITE_SENTRY_DSN || '';
@@ -41,22 +19,27 @@ let initialized = false;
  * so session replay never runs for a visitor who declined or hasn't chosen.
  */
 export function enableSentry(): void {
-  if (initialized || !isConfigured || getConsent() !== 'granted') return;
-
-  Sentry.init({
-    dsn: DSN,
-    environment: ENVIRONMENT,
-    release: RELEASE_ID,
-    tracesSampleRate: 0,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({
-        maskAllText: true,
-        blockAllMedia: true,
-      }),
-    ],
-  });
-  initialized = true;
+  if (initialized || loading || !isConfigured || getConsent() !== 'granted') return;
+  loading = true;
+  void import('@sentry/react')
+    .then((sdk) => {
+      if (getConsent() !== 'granted') return;
+      Sentry = sdk;
+      sdk.init({
+        dsn: DSN,
+        environment: ENVIRONMENT,
+        release: RELEASE_ID,
+        tracesSampleRate: 0,
+        sendDefaultPii: false,
+        beforeSend: (event) => (window.location.pathname === '/admin' ? null : sanitizeTelemetry(event)),
+        beforeBreadcrumb: (breadcrumb) => sanitizeTelemetry(breadcrumb),
+      });
+      initialized = true;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      loading = false;
+    });
 }
 
 /**
@@ -64,7 +47,7 @@ export function enableSentry(): void {
  * client so no further events or session replays are sent. No-op if not active.
  */
 export function disableSentry(): void {
-  if (!initialized) return;
+  if (!initialized || !Sentry) return;
   void Sentry.close();
   initialized = false;
 }
@@ -81,10 +64,10 @@ export function isSentryInitialized(): boolean {
  * this is a no-op (the RUM module handles the console fallback).
  */
 export function captureSentryError(error: Error, context?: Record<string, unknown>): void {
-  if (!initialized) return;
+  if (!initialized || !Sentry) return;
 
   Sentry.captureException(error, {
-    extra: context,
+    extra: sanitizeTelemetry(context),
   });
 }
 
@@ -93,7 +76,7 @@ export function captureSentryError(error: Error, context?: Record<string, unknow
  * as RUM, no PII.
  */
 export function setSentryUserContext(context: Record<string, unknown>): void {
-  if (!initialized) return;
+  if (!initialized || !Sentry) return;
 
   Sentry.setUser({
     id: context.deviceId as string,
@@ -115,7 +98,7 @@ export function setSentryUserContext(context: Record<string, unknown>): void {
  * from the RUM module so both services have the same user-action context.
  */
 export function addSentryBreadcrumb(type: string, message: string, data?: Record<string, unknown>): void {
-  if (!initialized) return;
+  if (!initialized || !Sentry) return;
 
   Sentry.addBreadcrumb({
     type,
@@ -124,10 +107,3 @@ export function addSentryBreadcrumb(type: string, message: string, data?: Record
     level: type === 'error' ? 'error' : 'info',
   });
 }
-
-/**
- * Sentry-enhanced ErrorBoundary wrapper. Use this instead of the base
- * ErrorBoundary when Sentry is active to get automatic error capture
- * with React component stack.
- */
-export const SentryErrorBoundary = Sentry.ErrorBoundary;

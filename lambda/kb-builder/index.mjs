@@ -21,8 +21,6 @@ const cloudwatchClient = new CloudWatchClient({ region: "us-east-1" });
 const dynamoClient = new DynamoDBClient({ region: "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-const CORS_ORIGIN = "https://thechrisgrey.com";
-
 const S3_BUCKET = process.env.S3_BUCKET || "thechrisgrey-kb-source";
 const S3_KEY = process.env.KB_SOURCE_KEY || "content/knowledge-base.txt";
 
@@ -131,12 +129,12 @@ async function uploadToS3(document) {
 // eslint-disable-next-line complexity -- CRUD handler: auth, route dispatch, validation, S3 publish, error mapping across 6 endpoints
 export const handler = async (event) => {
   if (event.requestContext?.http?.method === "OPTIONS") {
-    return respond(200, { ok: true }, CORS_ORIGIN);
+    return respond(200, { ok: true });
   }
 
   // Health check (no auth required — used by post-deploy checks and monitoring)
   if (event.requestContext?.http?.method === "GET" && (event.rawPath || "") === "/health") {
-    return respond(200, { ok: true, service: "kb-builder", version: "1.0.0" }, CORS_ORIGIN);
+    return respond(200, { ok: true, service: "kb-builder", version: "1.0.0" });
   }
 
   const requestId = event.headers?.["x-request-id"] || randomUUID();
@@ -152,7 +150,7 @@ export const handler = async (event) => {
     const user = await validateCognitoToken(cognitoClient, GetUserCommand, authHeader);
     if (!user) {
       metrics.record("AuthFailed");
-      return respond(401, { error: "Unauthorized" }, CORS_ORIGIN);
+      return respond(401, { error: "Unauthorized" });
     }
     addBreadcrumb("auth", "cognito_authenticated", { user: user.Username });
 
@@ -167,12 +165,12 @@ export const handler = async (event) => {
     });
     if (!allowed) {
       metrics.record("RateLimited");
-      return respond(429, { error: "Too many requests" }, CORS_ORIGIN);
+      return respond(429, { error: "Too many requests" });
     }
 
     if (method === "GET" && path === "/entries") {
       const entries = await fetchEntries(false);
-      return respond(200, { entries }, CORS_ORIGIN);
+      return respond(200, { entries });
     }
 
     if (method === "POST" && path === "/entries") {
@@ -180,13 +178,13 @@ export const handler = async (event) => {
       try {
         body = JSON.parse(event.body || "{}");
       } catch {
-        return respond(400, { error: "Invalid JSON in request body" }, CORS_ORIGIN);
+        return respond(400, { error: "Invalid JSON in request body" });
       }
       const { title, category, content, date, sortOrder, isActive } = body;
 
       const validationError = validateEntryFields({ title, category, content, date, sortOrder }, true);
       if (validationError) {
-        return respond(400, { error: validationError }, CORS_ORIGIN);
+        return respond(400, { error: validationError });
       }
 
       const doc = {
@@ -201,26 +199,26 @@ export const handler = async (event) => {
 
       const result = await sanityClient.create(doc);
       metrics.record("EntryCreated");
-      return respond(201, { entry: result }, CORS_ORIGIN);
+      return respond(201, { entry: result });
     }
 
     if (method === "PUT" && path.startsWith("/entries/")) {
       const id = path.split("/entries/")[1];
-      if (!id) return respond(400, { error: "Missing entry ID" }, CORS_ORIGIN);
+      if (!id) return respond(400, { error: "Missing entry ID" });
       if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
-        return respond(400, { error: "Invalid entry ID format" }, CORS_ORIGIN);
+        return respond(400, { error: "Invalid entry ID format" });
       }
 
       let body;
       try {
         body = JSON.parse(event.body || "{}");
       } catch {
-        return respond(400, { error: "Invalid JSON in request body" }, CORS_ORIGIN);
+        return respond(400, { error: "Invalid JSON in request body" });
       }
 
       const validationError = validateEntryFields(body, false);
       if (validationError) {
-        return respond(400, { error: validationError }, CORS_ORIGIN);
+        return respond(400, { error: validationError });
       }
 
       // Verify document is a kbEntry before patching. Without this guard,
@@ -230,9 +228,9 @@ export const handler = async (event) => {
       // the SANITY_WRITE_TOKEN has full-dataset write scope. Mirrors the
       // DELETE guard below.
       const existing = await sanityClient.getDocument(id);
-      if (!existing) return respond(404, { error: "Entry not found" }, CORS_ORIGIN);
+      if (!existing) return respond(404, { error: "Entry not found" });
       if (existing._type !== "kbEntry") {
-        return respond(403, { error: "Cannot update non-kbEntry documents" }, CORS_ORIGIN);
+        return respond(403, { error: "Cannot update non-kbEntry documents" });
       }
 
       const patch = sanityClient.patch(id);
@@ -246,33 +244,33 @@ export const handler = async (event) => {
 
       const result = await patch.commit();
       metrics.record("EntryUpdated");
-      return respond(200, { entry: result }, CORS_ORIGIN);
+      return respond(200, { entry: result });
     }
 
     if (method === "DELETE" && path.startsWith("/entries/")) {
       const id = path.split("/entries/")[1];
-      if (!id) return respond(400, { error: "Missing entry ID" }, CORS_ORIGIN);
+      if (!id) return respond(400, { error: "Missing entry ID" });
       if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
-        return respond(400, { error: "Invalid entry ID format" }, CORS_ORIGIN);
+        return respond(400, { error: "Invalid entry ID format" });
       }
 
       // Verify document is a kbEntry before deleting
       const doc = await sanityClient.getDocument(id);
-      if (!doc) return respond(404, { error: "Entry not found" }, CORS_ORIGIN);
+      if (!doc) return respond(404, { error: "Entry not found" });
       if (doc._type !== "kbEntry") {
-        return respond(403, { error: "Cannot delete non-kbEntry documents" }, CORS_ORIGIN);
+        return respond(403, { error: "Cannot delete non-kbEntry documents" });
       }
 
       await sanityClient.delete(id);
       metrics.record("EntryDeleted");
-      return respond(200, { deleted: true }, CORS_ORIGIN);
+      return respond(200, { deleted: true });
     }
 
     if (method === "POST" && path === "/publish") {
       const entries = await fetchEntries(true);
 
       if (entries.length === 0) {
-        return respond(400, { error: "No active entries to publish" }, CORS_ORIGIN);
+        return respond(400, { error: "No active entries to publish" });
       }
 
       const document = assembleDocument(entries);
@@ -280,19 +278,15 @@ export const handler = async (event) => {
       metrics.record("KbPublished");
       captureProductEvent("KBPublished", { entryCount: entries.length });
 
-      return respond(
-        200,
-        {
-          message: "Knowledge Base document published",
-          entryCount: entries.length,
-          documentSize: document.length,
-          publishedAt: new Date().toISOString(),
-        },
-        CORS_ORIGIN,
-      );
+      return respond(200, {
+        message: "Knowledge Base document published",
+        entryCount: entries.length,
+        documentSize: document.length,
+        publishedAt: new Date().toISOString(),
+      });
     }
 
-    return respond(404, { error: "Not found" }, CORS_ORIGIN);
+    return respond(404, { error: "Not found" });
   } catch (error) {
     metrics.record("HandlerError");
     log.error("handler_error", {
@@ -300,7 +294,7 @@ export const handler = async (event) => {
       message: error instanceof Error ? error.message : "",
     });
     captureError(error, { handler: "kb-builder", path });
-    return respond(500, { error: "Internal server error" }, CORS_ORIGIN);
+    return respond(500, { error: "Internal server error" });
   } finally {
     await metrics.flush();
     await flushSentry();

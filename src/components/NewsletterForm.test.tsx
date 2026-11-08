@@ -1,3 +1,5 @@
+import { trackEvent } from '../utils/analytics';
+vi.mock('../utils/analytics', () => ({ trackEvent: vi.fn() }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -85,7 +87,7 @@ describe('NewsletterForm', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
       });
 
-      expect(screen.getByText('Thank You for Subscribing!')).toBeInTheDocument();
+      expect(screen.getByText('Check your inbox')).toBeInTheDocument();
       expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
         email: 'test@example.com',
         turnstileToken: 'turnstile-token',
@@ -126,7 +128,7 @@ describe('NewsletterForm', () => {
       await user.click(screen.getByRole('button', { name: /subscribe/i }));
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Server error');
+        expect(screen.getByRole('alert')).toHaveTextContent('Please try again');
       });
     });
 
@@ -212,8 +214,8 @@ describe('NewsletterForm', () => {
 
     it('fires the "Newsletter Subscribe" goal with its source on success', async () => {
       const user = userEvent.setup();
-      const plausible = vi.fn();
-      (window as unknown as { plausible: typeof plausible }).plausible = plausible;
+      const track = vi.mocked(trackEvent);
+      track.mockClear();
       mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
 
       render(<NewsletterForm variant="compact" source="home" />);
@@ -221,14 +223,14 @@ describe('NewsletterForm', () => {
       await user.click(screen.getByRole('button', { name: /subscribe/i }));
 
       await waitFor(() => {
-        expect(plausible).toHaveBeenCalledWith('Newsletter Subscribe', { props: { source: 'home' } });
+        expect(track).toHaveBeenCalledWith('Newsletter Confirmation Requested', { source: 'home' });
       });
     });
 
     it('does not fire the goal on a failed subscription', async () => {
       const user = userEvent.setup();
-      const plausible = vi.fn();
-      (window as unknown as { plausible: typeof plausible }).plausible = plausible;
+      const track = vi.mocked(trackEvent);
+      track.mockClear();
       mockFetch.mockResolvedValueOnce({ ok: false, status: 500, json: () => Promise.resolve({ error: 'nope' }) });
 
       render(<NewsletterForm variant="compact" source="home" />);
@@ -238,7 +240,7 @@ describe('NewsletterForm', () => {
       await waitFor(() => {
         expect(screen.getByRole('alert')).toBeInTheDocument();
       });
-      expect(plausible).not.toHaveBeenCalled();
+      expect(track).not.toHaveBeenCalled();
     });
   });
 });

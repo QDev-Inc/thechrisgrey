@@ -6,6 +6,7 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface VitalStat {
   average: number | null;
+  p75?: number | null;
   count: number;
 }
 

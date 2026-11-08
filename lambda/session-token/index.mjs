@@ -23,12 +23,22 @@ import { checkRateLimit } from "lambda-shared/rateLimit";
 import { DEVICE_ID_PATTERN, hashDeviceId } from "lambda-shared/deviceId";
 import { issueSessionToken } from "lambda-shared/sessionToken";
 import { createLogger } from "lambda-shared/logger";
-import { verifyTurnstile } from "lambda-shared/turnstile";
+import { verifyTurnstile, isTurnstileConfigured } from "lambda-shared/turnstile";
 import { MetricsCollector } from "lambda-shared/metrics";
 import { setRequestContext, captureError, addBreadcrumb, flushSentry } from "lambda-shared/errorTracking";
 import { captureProductEvent, flushProductAnalytics } from "lambda-shared/productAnalytics";
 
 export { verifyTurnstile } from "lambda-shared/turnstile";
+
+/** @param {unknown} value */
+function isRequestObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** @param {{ deviceId?: unknown }} body */
+function readDeviceId(body) {
+  return typeof body.deviceId === "string" ? body.deviceId : "";
+}
 
 /**
  * Build the issuer handler from injected dependencies.
@@ -64,6 +74,9 @@ export function createIssuerHandler({ docClient, UpdateCommand, verifyTurnstile,
       // isn't invoked for OPTIONS when CORS is configured); this is a safe fallback.
       return { statusCode: 204, body: "" };
     }
+    if (!signingKey || !isTurnstileConfigured(turnstileSecret)) {
+      return reply(503, { error: "service_unavailable" });
+    }
 
     // Health check (no auth required — used by post-deploy checks and monitoring)
     if (method === "GET") {
@@ -92,7 +105,8 @@ export function createIssuerHandler({ docClient, UpdateCommand, verifyTurnstile,
         return reply(400, { error: "invalid_json" });
       }
 
-      const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
+      if (!isRequestObject(body)) return reply(400, { error: "invalid_request" });
+      const deviceId = readDeviceId(body);
       if (!DEVICE_ID_PATTERN.test(deviceId)) {
         metrics?.record("InvalidDeviceId");
         return reply(400, { error: "invalid_device_id" });
@@ -139,6 +153,8 @@ export function createIssuerHandler({ docClient, UpdateCommand, verifyTurnstile,
       return reply(200, {
         chatToken,
         blueprintToken,
+        mcpToken: issueSessionToken({ deviceHash, scope: "mcp" }, signingKey, chatTtl),
+        mcpExpiresIn: chatTtl,
         chatExpiresIn: chatTtl,
         blueprintExpiresIn: blueprintTtl,
       });
@@ -198,7 +214,9 @@ export const handler = createIssuerHandler({
     signingKey: SIGNING_KEY,
     turnstileSecret: TURNSTILE_SECRET,
     corsOrigin: CORS_ORIGIN,
-    allowedOrigins: [CORS_ORIGIN],
+    allowedOrigins: CORS_ORIGIN.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
     rateLimitTable: RATE_LIMIT_TABLE,
     chatTtl: CHAT_TTL,
     blueprintTtl: BLUEPRINT_TTL,

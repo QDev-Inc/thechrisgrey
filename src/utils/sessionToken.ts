@@ -20,7 +20,7 @@ const log = createLogger('SessionToken');
  * (`getSessionToken`) wires the real deps.
  */
 
-export type SessionScope = 'chat' | 'blueprint';
+export type SessionScope = 'chat' | 'blueprint' | 'mcp';
 
 export interface SessionTokenDeps {
   /** Issuer Function URL. Empty string disables tokens (returns "" — server then rejects or, in dev, accepts). */
@@ -35,6 +35,8 @@ export interface SessionTokenDeps {
 interface IssuerResponse {
   chatToken: string;
   blueprintToken: string;
+  mcpToken: string;
+  mcpExpiresIn: number;
   chatExpiresIn: number;
   blueprintExpiresIn: number;
 }
@@ -75,6 +77,7 @@ export function createSessionTokenManager(deps: SessionTokenDeps) {
     }
     const data = (await res.json()) as IssuerResponse;
     const nowSec = Math.floor(deps.now() / 1000);
+    cache.mcp = { token: data.mcpToken, exp: nowSec + data.mcpExpiresIn };
     cache.chat = { token: data.chatToken, exp: nowSec + data.chatExpiresIn };
     cache.blueprint = { token: data.blueprintToken, exp: nowSec + data.blueprintExpiresIn };
   }
@@ -111,6 +114,7 @@ export function createSessionTokenManager(deps: SessionTokenDeps) {
   return {
     getToken,
     reset() {
+      delete cache.mcp;
       delete cache.chat;
       delete cache.blueprint;
       breaker.reset();

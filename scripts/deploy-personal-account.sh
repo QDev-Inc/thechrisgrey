@@ -45,13 +45,21 @@ require_config() {
   local name
   for name in \
     TURNSTILE_SECRET SANITY_WRITE_TOKEN RESEND_API_KEY RESEND_FROM_EMAIL \
-    CONTACT_RECIPIENT_EMAIL
+    CONTACT_RECIPIENT_EMAIL RESEND_NEWSLETTER_SEGMENT_ID RESEND_BLUEPRINT_SEGMENT_ID
   do
     if [ -z "${!name:-}" ]; then
       echo "Missing required value in $CONFIG_PATH: $name" >&2
       exit 1
     fi
   done
+  if [ "$RESEND_NEWSLETTER_SEGMENT_ID" = "$RESEND_BLUEPRINT_SEGMENT_ID" ]; then
+    echo "Newsletter and Blueprint must use separate Resend segments." >&2
+    exit 1
+  fi
+  if [ "${AI_PROVIDER:-bedrock}" = "cloudflare" ] && { [ -z "${CLOUDFLARE_AI_GATEWAY_URL:-}" ] || [ -z "${CLOUDFLARE_AI_GATEWAY_KEY:-}" ]; }; then
+    echo "Cloudflare inference requires its gateway URL and server-only key." >&2
+    exit 1
+  fi
 }
 
 source "$ROOT/scripts/lib/aws-preflight.sh"
@@ -170,6 +178,10 @@ RESEND_SECRET_ARN="$(aws secretsmanager describe-secret \
   --output text)"
 
 PARAMETERS=(
+  "AiProvider=${AI_PROVIDER:-bedrock}"
+  "KnowledgeSource=${KNOWLEDGE_SOURCE:-bedrock}"
+  "InferenceGatewayUrl=${CLOUDFLARE_AI_GATEWAY_URL:-}"
+  "InferenceGatewayKey=${CLOUDFLARE_AI_GATEWAY_KEY:-}"
   "ArtifactVersion=$VERSION"
   "CorsOrigin=${CORS_ORIGINS}"
   "ChatSigningKey=${CHAT_SIGNING_KEY}"
@@ -183,6 +195,7 @@ PARAMETERS=(
   "ResendFromEmail=${RESEND_FROM_EMAIL}"
   "ContactRecipientEmail=${CONTACT_RECIPIENT_EMAIL}"
   "ResendNewsletterSegmentId=${RESEND_NEWSLETTER_SEGMENT_ID:-}"
+  "ResendBlueprintSegmentId=${RESEND_BLUEPRINT_SEGMENT_ID:-}"
 )
 
 aws cloudformation deploy \

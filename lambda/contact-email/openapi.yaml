@@ -72,9 +72,16 @@ components:
         website:
           type: string
           description: Hidden honeypot field. Real visitors leave it empty.
+        subject:
+          type: string
+          maxLength: 200
+        details:
+          type: string
+          maxLength: 1000
+          description: Optional event or organization context, separate from the message limit.
         turnstileToken:
           type: string
-          description: One-time Cloudflare Turnstile token, required when Turnstile is configured.
+          description: One-time Cloudflare Turnstile (action contact, allowlisted hostname) token, required when Turnstile is configured.
     AcceptedResponse:
       type: object
       required: [ok]
