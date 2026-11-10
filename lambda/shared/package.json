@@ -28,10 +28,10 @@
     "./secrets": "./secrets.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch": "^3.1068.0",
+    "@aws-sdk/client-cloudwatch": "^3.1164.0",
     "@sentry/node": "^10.0.0",
     "aws-jwt-verify": "^5.2.1",
-    "posthog-node": "^5.39.4"
+    "posthog-node": "^5.63.1"
   },
   "scripts": {
     "test": "node --test __tests__/*.test.mjs"
