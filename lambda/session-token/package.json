@@ -5,8 +5,8 @@
   "description": "Mints short-lived, scoped session tokens (chat/blueprint) after a Cloudflare Turnstile check. Server-only signing key.",
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.1068.0",
-    "@aws-sdk/client-dynamodb": "^3.1068.0",
-    "@aws-sdk/lib-dynamodb": "^3.1079.0",
+    "@aws-sdk/client-dynamodb": "^3.1164.0",
+    "@aws-sdk/lib-dynamodb": "^3.1164.0",
     "@sentry/node": "^10.0.0",
     "posthog-node": "^5.39.4",
     "lambda-shared": "file:../shared"
