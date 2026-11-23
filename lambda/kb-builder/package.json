@@ -12,7 +12,7 @@
     "@aws-sdk/lib-dynamodb": "^3.1079.0",
     "@sanity/client": "^7.22.1",
     "@sentry/node": "^10.0.0",
-    "posthog-node": "^5.39.4",
+    "posthog-node": "^6.0.5",
     "lambda-shared": "file:../shared",
     "aws-jwt-verify": "^5.2.1"
   },
